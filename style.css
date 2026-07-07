@@ -372,6 +372,28 @@ textarea {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ---------- Section header with action button ---------- */
+.section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.section-header .section-label {
+  margin: 0;
+}
+
+.add-bed-btn {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  background: #e4f4e8;
+  border: 1px solid #b9e2c2;
+  border-radius: 999px;
+  padding: 5px 12px;
+}
+
 /* ---------- Crop tags (form) ---------- */
 .crop-tags {
   display: flex;

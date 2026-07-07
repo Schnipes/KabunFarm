@@ -222,6 +222,33 @@ function renderBeds(beds) {
     }).join("");
 }
 
+function addBed() {
+    const nextNum = bedsData.length > 0
+        ? Math.max(...bedsData.map(b => Number(b.bedNumber))) + 1
+        : 1;
+
+    const newBed = {
+        action:    "addBed",
+        id:        "bed_" + Date.now(),
+        bedNumber: nextNum,
+        location:  "commercial",
+        status:    "active"
+    };
+
+    // Optimistically update local state
+    bedsData.push({ bedNumber: nextNum, location: "commercial", crops: [] });
+    renderBeds(bedsData);
+    populateBedDropdown();
+
+    // Queue and sync
+    const queue = getOfflineLogs();
+    queue.push(newBed);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    updateSyncBadge();
+    showToast(`Bed ${nextNum} added!`);
+    processOfflineQueue();
+}
+
 async function fetchBeds() {
     try {
         const res  = await fetch(GOOGLE_SCRIPT_URL + "?action=getBeds");
