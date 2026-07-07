@@ -26,6 +26,7 @@ const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", har
 let bedsData          = [];
 let selectedBedForLog = null;
 let addBedPending     = false;
+let activeLogFilter   = "all";
 
 // --- 2. Utilities ---
 function escapeHtml(str) {
@@ -302,7 +303,7 @@ function switchView(viewName) {
     document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
     const activeBtn = document.querySelector(`[data-view="${viewName}"]`);
     if (activeBtn) activeBtn.classList.add("active");
-    if (viewName === "data") fetchLogs();
+    if (viewName === "data") { renderBedFilterChips(); fetchLogs(); }
     if (viewName === "formulas") fetchFormulas();
 }
 
@@ -443,6 +444,7 @@ async function fetchBeds() {
             bedsData = JSON.parse(cached);
             renderBeds(bedsData);
             populateBedDropdown();
+            renderBedFilterChips();
         } catch (e) { /* ignore corrupt cache */ }
     }
     try {
@@ -453,6 +455,7 @@ async function fetchBeds() {
             localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(data.beds));
             renderBeds(bedsData);
             populateBedDropdown();
+            renderBedFilterChips();
         }
     } catch (e) {
         console.error("Could not load beds:", e);
@@ -498,38 +501,87 @@ async function fetchFormulas() {
     }
 }
 
-// --- 11. Log Data (Data Tab) ---
+// --- 11. Log Data (Activity Tab) ---
+function shortDate(dateStr) {
+    const d = new Date(dateStr + "T00:00:00");
+    return d.toLocaleDateString("en-MY", { month: "short", day: "numeric" });
+}
+
+function dateGroupLabel(dateStr) {
+    const today     = todayString();
+    const d         = new Date(); d.setDate(d.getDate() - 1);
+    const yesterday = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+    if (dateStr === today)     return "Today · "     + shortDate(dateStr);
+    if (dateStr === yesterday) return "Yesterday · " + shortDate(dateStr);
+    return shortDate(dateStr);
+}
+
+function renderBedFilterChips() {
+    const container = document.getElementById("bedFilterChips");
+    if (!container) return;
+    const chips = [{ label: "All", value: "all" }, ...bedsData.map(b => ({ label: "Bed " + b.bedNumber, value: String(b.bedNumber) }))];
+    container.innerHTML = chips.map(c =>
+        `<button class="bed-filter-chip${activeLogFilter === c.value ? " active" : ""}" onclick="filterLogs('${c.value}')">${c.label}</button>`
+    ).join("");
+}
+
+function filterLogs(bedNum) {
+    activeLogFilter = bedNum;
+    renderBedFilterChips();
+    const cached = localStorage.getItem(LOGS_CACHE_KEY);
+    renderLogs(cached ? JSON.parse(cached) : []);
+}
+
 function renderLogs(logs) {
     const container = document.getElementById("logList");
-    if (!logs.length) {
+
+    const filtered = activeLogFilter === "all"
+        ? logs
+        : logs.filter(log => String(log.bedNumber) === String(activeLogFilter));
+
+    if (!filtered.length) {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No logs yet.</p>';
         return;
     }
-    container.innerHTML = logs.map(log => {
-        const icon        = CATEGORY_ICON[log.activityCategory]  || "📝";
-        const label       = CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory);
-        const dateDisplay = log.date ? log.date.toString().slice(0, 10) : "";
-        const bedNum      = log.bedNumber && log.bedNumber !== "all" ? log.bedNumber : null;
-        const scopeLabel  = bedNum ? `Bed ${escapeHtml(String(bedNum))}` : "Whole Farm";
-        const cropLine    = log.cropName   ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`    : "";
-        const inputLine   = log.inputsUsed ? `<p class="log-inputs">${escapeHtml(log.inputsUsed)}</p>`     : "";
-        const financials  = (log.costRM || log.revenueRM) ? `
-            <div class="log-financials">
-                ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>`    : ""}
-                ${log.revenueRM ? `<span>Revenue: RM ${parseFloat(log.revenueRM).toFixed(2)}</span>` : ""}
-            </div>` : "";
-        return `
-        <div class="log-card">
-            <div class="log-header">
-                <span class="log-icon">${icon}</span>
-                <div class="log-meta">
-                    <p class="log-title">${label}</p>
-                    <p class="log-date">${dateDisplay} &middot; <span class="tag">${scopeLabel}</span></p>
-                </div>
-            </div>
-            ${cropLine}${inputLine}${financials}
-        </div>`;
-    }).join("");
+
+    const groups = {};
+    filtered.forEach(log => {
+        const key = log.date ? log.date.toString().slice(0, 10) : "Unknown";
+        if (!groups[key]) groups[key] = [];
+        groups[key].push(log);
+    });
+
+    const html = Object.keys(groups)
+        .sort((a, b) => b.localeCompare(a))
+        .map(dateKey => {
+            const cards = groups[dateKey].map(log => {
+                const icon       = CATEGORY_ICON[log.activityCategory]  || "📝";
+                const label      = CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory);
+                const bedNum     = log.bedNumber && log.bedNumber !== "all" ? log.bedNumber : null;
+                const scopeLabel = bedNum ? `Bed ${escapeHtml(String(bedNum))}` : "Whole Farm";
+                const cropLine   = log.cropName   ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`  : "";
+                const inputLine  = log.inputsUsed ? `<p class="log-inputs">${escapeHtml(log.inputsUsed)}</p>`   : "";
+                const financials = (log.costRM || log.revenueRM) ? `
+                    <div class="log-financials">
+                        ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>`    : ""}
+                        ${log.revenueRM ? `<span>Revenue: RM ${parseFloat(log.revenueRM).toFixed(2)}</span>` : ""}
+                    </div>` : "";
+                return `
+                <div class="log-card">
+                    <div class="log-header">
+                        <span class="log-icon">${icon}</span>
+                        <div class="log-meta">
+                            <p class="log-title">${label}</p>
+                            <p class="log-date"><span class="tag">${scopeLabel}</span></p>
+                        </div>
+                    </div>
+                    ${cropLine}${inputLine}${financials}
+                </div>`;
+            }).join("");
+            return `<p class="log-date-group">${dateGroupLabel(dateKey)}</p>${cards}`;
+        }).join("");
+
+    container.innerHTML = html;
 }
 
 async function fetchLogs() {

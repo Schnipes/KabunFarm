@@ -738,6 +738,50 @@ textarea {
   font-size: 14px;
 }
 
+/* ---------- Activity tab — bed filter chips ---------- */
+.bed-filter-chips {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 10px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.bed-filter-chips::-webkit-scrollbar { display: none; }
+
+.bed-filter-chip {
+  font-size: 13px;
+  font-weight: 600;
+  color: #555555;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 5px 14px;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.bed-filter-chip.active {
+  background: #e4f4e8;
+  color: var(--color-primary-dark);
+  border-color: #b9e2c2;
+}
+
+/* ---------- Activity tab — date group headers ---------- */
+.log-date-group {
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #888;
+  margin: 16px 0 8px 4px;
+}
+
+.log-date-group:first-child {
+  margin-top: 0;
+}
+
 /* ---------- Validation error state ---------- */
 input.invalid,
 select.invalid,
