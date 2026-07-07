@@ -3,6 +3,7 @@ const STORAGE_KEY        = "offline_farm_logs";
 const BEDS_CACHE_KEY     = "farmlog_beds_cache";
 const FORMULAS_CACHE_KEY = "farmlog_formulas_cache";
 const LOGS_CACHE_KEY     = "farmlog_logs_cache";
+const SALES_CACHE_KEY    = "farmlog_sales_cache";
 const LAST_BED_KEY       = "farmlog_last_bed";
 const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
 
@@ -20,8 +21,8 @@ const DEFAULT_CATEGORY = {
     crop:    "sowing"
 };
 
-const CATEGORY_ICON  = { watering: "💧", pest_control: "🐛", harvest: "🧺", sowing: "🌱" };
-const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", harvest: "Harvest", sowing: "Sowing" };
+const CATEGORY_ICON  = { watering: "💧", pest_control: "🐛", harvest: "🧺", sowing: "🌱", sale: "💰" };
+const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", harvest: "Harvest", sowing: "Sowing", sale: "Sale" };
 
 let bedsData          = [];
 let formulasData      = [];
@@ -597,7 +598,8 @@ function renderTypeFilterChips() {
         { label: "💧 Watering",     value: "watering" },
         { label: "🐛 Pest control", value: "pest_control" },
         { label: "🧺 Harvest",      value: "harvest" },
-        { label: "🌱 Sowing",       value: "sowing" }
+        { label: "🌱 Sowing",       value: "sowing" },
+        { label: "💰 Sales",        value: "sale" }
     ];
     container.innerHTML = types.map(t =>
         `<button class="bed-filter-chip${activeTypeFilter === t.value ? " active" : ""}" onclick="filterByType('${t.value}')">${t.label}</button>`
@@ -607,15 +609,31 @@ function renderTypeFilterChips() {
 function filterLogs(bedNum) {
     activeLogFilter = bedNum;
     renderBedFilterChips();
-    const cached = localStorage.getItem(LOGS_CACHE_KEY);
-    renderLogs(cached ? JSON.parse(cached) : []);
+    renderCombinedActivity();
 }
 
 function filterByType(type) {
     activeTypeFilter = type;
     renderTypeFilterChips();
-    const cached = localStorage.getItem(LOGS_CACHE_KEY);
-    renderLogs(cached ? JSON.parse(cached) : []);
+    renderCombinedActivity();
+}
+
+function renderCombinedActivity() {
+    const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
+    const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
+    // Normalise sales into the same shape as logs for rendering
+    const saleEntries = sales.map(s => ({
+        id:               s.id,
+        date:             s.date,
+        activityCategory: "sale",
+        bedNumber:        null,
+        cropName:         s.crop,
+        quantity:         s.quantity,
+        unit:             s.unit,
+        pricePerUnit:     s.pricePerUnit,
+        totalRevenue:     s.totalRevenue
+    }));
+    renderLogs([...logs, ...saleEntries]);
 }
 
 function deleteLogEntry(logId) {
@@ -637,7 +655,7 @@ function renderLogs(logs) {
     const container = document.getElementById("logList");
 
     const filtered = logs
-        .filter(log => activeLogFilter === "all" || String(log.bedNumber) === String(activeLogFilter))
+        .filter(log => activeLogFilter === "all" || (log.activityCategory === "sale" ? activeLogFilter === "all" : String(log.bedNumber) === String(activeLogFilter)))
         .filter(log => activeTypeFilter === "all" || log.activityCategory === activeTypeFilter);
 
     if (!filtered.length) {
@@ -660,24 +678,39 @@ function renderLogs(logs) {
                 const label      = CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory);
                 const bedNum     = log.bedNumber && log.bedNumber !== "all" ? log.bedNumber : null;
                 const scopeLabel = bedNum ? `Bed ${escapeHtml(String(bedNum))}` : "Whole Farm";
-                const cropLine   = log.cropName   ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`  : "";
-                const inputLine  = log.inputsUsed ? `<p class="log-inputs">${escapeHtml(log.inputsUsed)}</p>`   : "";
-                const financials = (log.costRM || log.revenueRM) ? `
+                const isSale = log.activityCategory === "sale";
+
+                let body = "";
+                if (isSale) {
+                    body = `
+                    <div class="sale-log-detail">
+                        <span class="sale-log-crop">🌱 ${escapeHtml(log.cropName || "")}</span>
+                        <span class="sale-log-qty">${escapeHtml(String(log.quantity))} ${escapeHtml(log.unit)}</span>
+                        <span class="sale-log-price">RM ${parseFloat(log.pricePerUnit).toFixed(2)}/${escapeHtml(log.unit)}</span>
+                        <span class="sale-log-total">RM ${parseFloat(log.totalRevenue).toFixed(2)}</span>
+                    </div>`;
+                } else {
+                    const cropLine  = log.cropName   ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`  : "";
+                    const inputLine = log.inputsUsed ? `<p class="log-inputs">${escapeHtml(log.inputsUsed)}</p>`   : "";
+                    const financials = (log.costRM || log.revenueRM) ? `
                     <div class="log-financials">
                         ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>`    : ""}
                         ${log.revenueRM ? `<span>Revenue: RM ${parseFloat(log.revenueRM).toFixed(2)}</span>` : ""}
                     </div>` : "";
+                    body = cropLine + inputLine + financials;
+                }
+
                 return `
-                <div class="log-card">
+                <div class="log-card${isSale ? " log-card-sale" : ""}">
                     <button class="log-delete-btn" onclick="deleteLogEntry('${escapeHtml(String(log.id))}')" aria-label="Delete log">✕</button>
                     <div class="log-header">
                         <span class="log-icon">${icon}</span>
                         <div class="log-meta">
                             <p class="log-title">${label}</p>
-                            <p class="log-date"><span class="tag">${scopeLabel}</span></p>
+                            ${!isSale ? `<p class="log-date"><span class="tag">${scopeLabel}</span></p>` : ""}
                         </div>
                     </div>
-                    ${cropLine}${inputLine}${financials}
+                    ${body}
                 </div>`;
             }).join("");
             return `<p class="log-date-group">${dateGroupLabel(dateKey)}</p>${cards}`;
@@ -687,27 +720,135 @@ function renderLogs(logs) {
 }
 
 async function fetchLogs() {
-    const container = document.getElementById("logList");
-    const cached = localStorage.getItem(LOGS_CACHE_KEY);
-    if (cached) {
-        try { renderLogs(JSON.parse(cached)); } catch (e) { /* ignore */ }
+    const container  = document.getElementById("logList");
+    const cachedLogs = localStorage.getItem(LOGS_CACHE_KEY);
+    if (cachedLogs) {
+        try { renderCombinedActivity(); } catch (e) { /* ignore */ }
     } else {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>';
     }
     try {
-        const res  = await fetch(GOOGLE_SCRIPT_URL + "?action=getLogs");
-        const data = await res.json();
-        const logs = data.logs || [];
-        localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
-        renderLogs(logs);
+        const [logsRes, salesRes] = await Promise.all([
+            fetch(GOOGLE_SCRIPT_URL + "?action=getLogs"),
+            fetch(GOOGLE_SCRIPT_URL + "?action=getSales")
+        ]);
+        const logsData  = await logsRes.json();
+        const salesData = await salesRes.json();
+        const logs  = logsData.logs   || [];
+        const sales = salesData.sales || [];
+        localStorage.setItem(LOGS_CACHE_KEY,  JSON.stringify(logs));
+        localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
+        renderCombinedActivity();
     } catch (e) {
-        if (!cached) {
-            container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load logs.</p>';
+        if (!cachedLogs) {
+            container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load activity.</p>';
         }
     }
 }
 
-// --- 12. App Initialization ---
+// --- 12. Sales ---
+function openSaleModal() {
+    document.getElementById("saleDate").value = todayString();
+    document.getElementById("saleCrop").value = "";
+    document.getElementById("saleQty").value = "";
+    document.getElementById("saleUnit").value = "kg";
+    document.getElementById("salePricePerUnit").value = "";
+    document.getElementById("saleTotalDisplay").textContent = "RM 0.00";
+    document.getElementById("saleCrop").classList.remove("invalid");
+    document.getElementById("saleQty").classList.remove("invalid");
+    document.getElementById("salePricePerUnit").classList.remove("invalid");
+
+    // Populate crop datalist from active beds
+    const datalist = document.getElementById("activeCropsList");
+    const crops = [...new Set(bedsData.flatMap(b => b.crops.map(c => c.cropName)))];
+    datalist.innerHTML = crops.map(c => `<option value="${escapeHtml(c)}">`).join("");
+
+    document.getElementById("saleModalOverlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+function closeSaleModal() {
+    document.getElementById("saleModalOverlay").classList.remove("open");
+    document.body.style.overflow = "";
+}
+
+function calcSaleTotal() {
+    const qty   = parseFloat(document.getElementById("saleQty").value) || 0;
+    const price = parseFloat(document.getElementById("salePricePerUnit").value) || 0;
+    const total = qty * price;
+    document.getElementById("saleTotalDisplay").textContent = "RM " + total.toFixed(2);
+}
+
+function handleSaleSubmit(event) {
+    event.preventDefault();
+
+    const date         = document.getElementById("saleDate").value;
+    const crop         = document.getElementById("saleCrop").value.trim();
+    const qty          = document.getElementById("saleQty").value;
+    const unit         = document.getElementById("saleUnit").value;
+    const pricePerUnit = document.getElementById("salePricePerUnit").value;
+
+    const cropEl  = document.getElementById("saleCrop");
+    const qtyEl   = document.getElementById("saleQty");
+    const priceEl = document.getElementById("salePricePerUnit");
+    cropEl.classList.toggle("invalid",  !crop);
+    qtyEl.classList.toggle("invalid",   !qty);
+    priceEl.classList.toggle("invalid", !pricePerUnit);
+    if (!crop || !qty || !pricePerUnit) {
+        showToast("Please fill in all required fields.");
+        return;
+    }
+
+    const totalRevenue = (parseFloat(qty) * parseFloat(pricePerUnit)).toFixed(2);
+
+    const entry = {
+        action:       "addSale",
+        id:           "sale_" + Date.now(),
+        date,
+        crop,
+        quantity:     qty,
+        unit,
+        pricePerUnit,
+        totalRevenue
+    };
+
+    const queue = getOfflineLogs();
+    queue.push(entry);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+
+    // Optimistic: prepend to sales cache
+    const cached = localStorage.getItem(SALES_CACHE_KEY);
+    const sales  = cached ? JSON.parse(cached) : [];
+    sales.unshift(entry);
+    localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
+
+    updateSyncBadge();
+    closeSaleModal();
+    showToast(`Sale logged · ${qty} ${unit} ${crop} · RM ${totalRevenue}`);
+    processOfflineQueue();
+
+    // Refresh activity tab if visible
+    if (!document.getElementById("view-data").hidden) renderCombinedActivity();
+}
+
+document.getElementById("saleModalOverlay").addEventListener("click", function(e) {
+    if (e.target === this) closeSaleModal();
+});
+
+async function fetchSales() {
+    const cached = localStorage.getItem(SALES_CACHE_KEY);
+    try {
+        const res   = await fetch(GOOGLE_SCRIPT_URL + "?action=getSales");
+        const data  = await res.json();
+        const sales = data.sales || [];
+        localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
+        return sales;
+    } catch (e) {
+        return cached ? JSON.parse(cached) : [];
+    }
+}
+
+// --- 13. App Initialization ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {

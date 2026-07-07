@@ -10,6 +10,7 @@
   --color-accent-pest: #b3261e;
   --color-accent-harvest: #a3690b;
   --color-accent-crop: #1a8f3c;
+  --color-accent-sale: #7b4fb5;
   --radius: 12px;
   --tap-min: 56px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
@@ -188,6 +189,7 @@ section {
 .action-btn.pest    { background: var(--color-accent-pest); }
 .action-btn.harvest { background: var(--color-accent-harvest); }
 .action-btn.crop    { background: var(--color-accent-crop); }
+.action-btn.sale    { background: var(--color-accent-sale); }
 
 /* ---------- Batch cards ---------- */
 .batch-card {
@@ -778,6 +780,58 @@ textarea {
   font-size: 13px;
   font-weight: 600;
   color: var(--color-primary-dark);
+}
+
+/* ---------- Sale log card ---------- */
+.log-card-sale {
+  border-left: 3px solid var(--color-accent-sale);
+}
+
+.sale-log-detail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+  font-size: 13px;
+}
+
+.sale-log-crop  { color: #444; flex: 1 1 100%; }
+.sale-log-qty   { font-weight: 600; }
+.sale-log-price { color: #666; }
+.sale-log-total { font-weight: 700; color: var(--color-accent-sale); margin-left: auto; font-size: 15px; }
+
+/* ---------- Sale modal form ---------- */
+.sale-qty-row {
+  display: flex;
+  gap: 10px;
+}
+
+.sale-qty-row input {
+  flex: 1;
+}
+
+.sale-qty-row select {
+  width: 90px;
+}
+
+.sale-total-bar {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 16px;
+  font-size: 15px;
+  color: #555;
+  margin-bottom: 8px;
+  text-align: right;
+}
+
+.sale-total-bar strong {
+  color: var(--color-accent-sale);
+  font-size: 20px;
+  margin-left: 8px;
 }
 
 /* ---------- Harvest crop checkboxes ---------- */
