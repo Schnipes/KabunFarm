@@ -24,6 +24,7 @@ const CATEGORY_ICON  = { watering: "💧", pest_control: "🐛", harvest: "🧺"
 const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", harvest: "Harvest", sowing: "Sowing" };
 
 let bedsData          = [];
+let formulasData      = [];
 let selectedBedForLog = null;
 let addBedPending     = false;
 let activeLogFilter   = "all";
@@ -483,21 +484,71 @@ async function fetchBeds() {
 }
 
 // --- 10. Formulas Tab ---
+function parseRecipe(recipeStr) {
+    if (!recipeStr || !recipeStr.includes(':')) return null;
+    try {
+        return recipeStr.split('|').map(part => {
+            const [name, amount, unit] = part.split(':');
+            return { name: name.trim(), amount: parseFloat(amount), unit: unit.trim() };
+        });
+    } catch (e) { return null; }
+}
+
+function renderIngredients(ingredients, liters) {
+    const vol = parseFloat(liters) || 16;
+    return ingredients.map(ing => {
+        const calc = ing.unit === 'g'
+            ? (ing.amount * vol).toFixed(1).replace(/\.0$/, '')
+            : Math.round(ing.amount * vol);
+        return `<div class="ingredient-row">
+            <span class="ingredient-name">${escapeHtml(ing.name)}</span>
+            <span class="ingredient-amount">${calc} ${ing.unit}</span>
+        </div>`;
+    }).join('');
+}
+
+function calcDose(index, liters) {
+    const formula = formulasData[index];
+    if (!formula) return;
+    const ingredients = parseRecipe(formula.recipe);
+    if (!ingredients) return;
+    const container = document.getElementById(`ingredients-${index}`);
+    if (container) container.innerHTML = renderIngredients(ingredients, liters);
+}
+
 function renderFormulas(formulas) {
+    formulasData = formulas;
     const container = document.getElementById("formulaList");
     if (!formulas.length) {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No formulas yet. Add them in the Formulas sheet tab.</p>';
         return;
     }
-    container.innerHTML = formulas.map(f => `
+    container.innerHTML = formulas.map((f, i) => {
+        const ingredients = parseRecipe(f.recipe);
+        const calcSection = ingredients ? `
+            <div class="formula-calc">
+                <div class="formula-calc-row">
+                    <span class="formula-calc-label">Sprayer volume</span>
+                    <div class="formula-volume-wrap">
+                        <input type="number" class="formula-volume-input" value="16" min="1" max="100" step="1"
+                               oninput="calcDose(${i}, this.value)" id="vol-${i}">
+                        <span class="formula-volume-unit">L</span>
+                    </div>
+                </div>
+                <div class="formula-ingredients" id="ingredients-${i}">
+                    ${renderIngredients(ingredients, 16)}
+                </div>
+            </div>` : (f.recipe ? `<pre class="formula-recipe">${escapeHtml(f.recipe)}</pre>` : '');
+        return `
         <div class="formula-card">
             <div class="formula-header">
                 <p class="formula-name">${escapeHtml(f.name)}</p>
                 ${f.category ? `<span class="tag">${escapeHtml(f.category)}</span>` : ""}
             </div>
             ${f.description ? `<p class="formula-desc">${escapeHtml(f.description)}</p>` : ""}
-            ${f.recipe ? `<pre class="formula-recipe">${escapeHtml(f.recipe)}</pre>` : ""}
-        </div>`).join("");
+            ${calcSection}
+        </div>`;
+    }).join("");
 }
 
 async function fetchFormulas() {

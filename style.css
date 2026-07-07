@@ -616,6 +616,82 @@ textarea {
   color: var(--color-text);
 }
 
+/* ---------- Formula dosage calculator ---------- */
+.formula-calc {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--color-border);
+}
+
+.formula-calc-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.formula-calc-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: #555;
+}
+
+.formula-volume-wrap {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.formula-volume-input {
+  width: 64px;
+  min-height: unset !important;
+  height: 36px;
+  font-size: 15px;
+  font-weight: 700;
+  padding: 6px 10px;
+  text-align: center;
+  border: 2px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.formula-volume-unit {
+  font-size: 14px;
+  font-weight: 700;
+  color: #555;
+}
+
+.formula-ingredients {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.ingredient-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 14px;
+  padding: 8px 10px;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+.ingredient-name {
+  color: var(--color-text);
+  font-weight: 500;
+}
+
+.ingredient-amount {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  background: #e4f4e8;
+  border: 1px solid #b9e2c2;
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 13px;
+}
+
 /* ---------- Log cards ---------- */
 .log-card {
   background: var(--color-surface);
