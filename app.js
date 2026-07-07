@@ -430,6 +430,11 @@ function openBedDetail(bedNum) {
 
     content.innerHTML = html;
 
+    const isEmpty = !bed.crops.length;
+    document.querySelector(".bed-log-actions .water").hidden  = isEmpty;
+    document.querySelector(".bed-log-actions .pest").hidden   = isEmpty;
+    document.querySelector(".bed-log-actions .harvest").hidden = isEmpty;
+
     document.getElementById("bedDetailOverlay").classList.add("open");
     document.body.style.overflow = "hidden";
 }
