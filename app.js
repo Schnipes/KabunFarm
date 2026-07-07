@@ -974,6 +974,7 @@ document.addEventListener("DOMContentLoaded", () => {
     updateSyncBadge();
     processOfflineQueue();
     fetchBeds();
+    fetchFormulas();
 
     document.getElementById("activityCategory").addEventListener("change", updateBedFields);
     document.getElementById("bedScope").addEventListener("change", updateBedFields);
