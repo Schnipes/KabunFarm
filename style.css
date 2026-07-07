@@ -513,6 +513,48 @@ textarea {
   padding: 2px 9px;
 }
 
+/* ---------- Formula cards ---------- */
+.formula-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 16px;
+  margin-bottom: 12px;
+}
+
+.formula-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.formula-name {
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0;
+}
+
+.formula-desc {
+  font-size: 13px;
+  color: #555;
+  margin: 0 0 10px;
+}
+
+.formula-recipe {
+  font-family: var(--font);
+  font-size: 14px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  background: #fff;
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 12px;
+  margin: 0;
+  color: var(--color-text);
+}
+
 /* ---------- Log cards ---------- */
 .log-card {
   background: var(--color-surface);

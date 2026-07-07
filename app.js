@@ -228,6 +228,7 @@ function switchView(viewName) {
     const activeBtn = document.querySelector(`[data-view="${viewName}"]`);
     if (activeBtn) activeBtn.classList.add("active");
     if (viewName === "data") fetchLogs();
+    if (viewName === "formulas") fetchFormulas();
 }
 
 // --- 8. Beds (Home Screen) ---
@@ -369,7 +370,37 @@ async function fetchBeds() {
     }
 }
 
-// --- 9. Log Data (Data Tab) ---
+// --- 9. Formulas Tab ---
+function renderFormulas(formulas) {
+    const container = document.getElementById("formulaList");
+    if (!formulas.length) {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No formulas yet. Add them in the Formulas sheet tab.</p>';
+        return;
+    }
+    container.innerHTML = formulas.map(f => `
+        <div class="formula-card">
+            <div class="formula-header">
+                <p class="formula-name">${f.name}</p>
+                ${f.category ? `<span class="tag">${f.category}</span>` : ""}
+            </div>
+            ${f.description ? `<p class="formula-desc">${f.description}</p>` : ""}
+            ${f.recipe ? `<pre class="formula-recipe">${f.recipe}</pre>` : ""}
+        </div>`).join("");
+}
+
+async function fetchFormulas() {
+    const container = document.getElementById("formulaList");
+    container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>';
+    try {
+        const res  = await fetch(GOOGLE_SCRIPT_URL + "?action=getFormulas");
+        const data = await res.json();
+        renderFormulas(data.formulas || []);
+    } catch (e) {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load formulas.</p>';
+    }
+}
+
+// --- 10. Log Data (Data Tab) ---
 function renderLogs(logs) {
     const container = document.getElementById("logList");
     if (!logs.length) {
