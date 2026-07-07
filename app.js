@@ -127,11 +127,15 @@ async function processOfflineQueue() {
 }
 
 // --- 5. App Initialization & Listeners ---
-// Listen for the exact moment the phone regains internet connection
 window.addEventListener("online", processOfflineQueue);
 
-// When the app opens, check the UI and try to sync any old data
 document.addEventListener("DOMContentLoaded", () => {
     updateSyncBadge();
     processOfflineQueue();
+
+    if ("serviceWorker" in navigator) {
+        navigator.serviceWorker.register("./sw.js")
+            .then(reg => console.log("Service worker registered:", reg.scope))
+            .catch(err => console.error("Service worker registration failed:", err));
+    }
 });
