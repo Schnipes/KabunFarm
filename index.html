@@ -18,47 +18,59 @@
   </header>
 
   <main>
-    <section aria-label="Quick actions">
-      <p class="section-label">Quick log</p>
-      <div class="quick-actions">
-        <button class="action-btn water" onclick="openModal('water')">
-          <span class="icon" aria-hidden="true">💧</span>
-          <span>Log Fertigation / Watering</span>
-        </button>
-        <button class="action-btn pest" onclick="openModal('pest')">
-          <span class="icon" aria-hidden="true">🐛</span>
-          <span>Log Pest / Treatment</span>
-        </button>
-        <button class="action-btn harvest" onclick="openModal('harvest')">
-          <span class="icon" aria-hidden="true">🧺</span>
-          <span>Log Harvest / Sale</span>
-        </button>
-        <button class="action-btn crop" onclick="openModal('crop')">
-          <span class="icon" aria-hidden="true">🌱</span>
-          <span>Log Crop Action</span>
-        </button>
-      </div>
-    </section>
+    <!-- Home View -->
+    <div id="view-home" class="view">
+      <section aria-label="Quick actions">
+        <p class="section-label">Quick log</p>
+        <div class="quick-actions">
+          <button class="action-btn water" onclick="openModal('water')">
+            <span class="icon" aria-hidden="true">💧</span>
+            <span>Log Fertigation / Watering</span>
+          </button>
+          <button class="action-btn pest" onclick="openModal('pest')">
+            <span class="icon" aria-hidden="true">🐛</span>
+            <span>Log Pest / Treatment</span>
+          </button>
+          <button class="action-btn harvest" onclick="openModal('harvest')">
+            <span class="icon" aria-hidden="true">🧺</span>
+            <span>Log Harvest / Sale</span>
+          </button>
+          <button class="action-btn crop" onclick="openModal('crop')">
+            <span class="icon" aria-hidden="true">🌱</span>
+            <span>Log Crop Action</span>
+          </button>
+        </div>
+      </section>
 
-    <section aria-label="Active batches">
-      <p class="section-label">Active batches</p>
+      <section aria-label="Active batches">
+        <p class="section-label">Active batches</p>
+        <div id="batchList">
+          <p style="color:#888;font-size:14px;padding:8px 4px;">Loading batches...</p>
+        </div>
+      </section>
+    </div>
 
-      <div id="batchList">
-        <p style="color:#888;font-size:14px;padding:8px 4px;">Loading batches...</p>
-      </div>
-    </section>
+    <!-- Data View -->
+    <div id="view-data" class="view" hidden>
+      <section aria-label="Recent logs">
+        <p class="section-label">Recent logs</p>
+        <div id="logList">
+          <p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>
+        </div>
+      </section>
+    </div>
   </main>
 
   <nav class="bottom-nav" aria-label="Primary">
-    <button class="nav-btn active">
+    <button class="nav-btn active" data-view="home">
       <span class="nav-icon" aria-hidden="true">🏠</span>
       <span>Home</span>
     </button>
-    <button class="nav-btn">
+    <button class="nav-btn" data-view="formulas">
       <span class="nav-icon" aria-hidden="true">🧪</span>
       <span>Formulas</span>
     </button>
-    <button class="nav-btn">
+    <button class="nav-btn" data-view="data">
       <span class="nav-icon" aria-hidden="true">📊</span>
       <span>Data</span>
     </button>

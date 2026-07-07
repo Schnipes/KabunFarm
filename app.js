@@ -132,7 +132,18 @@ async function processOfflineQueue() {
     }
 }
 
-// --- 6. Batch Cards ---
+// --- 6. View Switching ---
+function switchView(viewName) {
+    document.querySelectorAll(".view").forEach(v => v.hidden = true);
+    const target = document.getElementById("view-" + viewName);
+    if (target) target.hidden = false;
+    document.querySelectorAll(".nav-btn").forEach(btn => btn.classList.remove("active"));
+    const activeBtn = document.querySelector(`[data-view="${viewName}"]`);
+    if (activeBtn) activeBtn.classList.add("active");
+    if (viewName === "data") fetchLogs();
+}
+
+// --- 7. Batch Cards ---
 function daysSince(dateStr) {
     const planted = new Date(dateStr);
     const today = new Date();
@@ -170,13 +181,63 @@ async function fetchBatches() {
     }
 }
 
-// --- 7. App Initialization & Listeners ---
+// --- 8. Log Data ---
+const CATEGORY_ICON  = { watering: "💧", pest_control: "🐛", harvest: "🧺", sowing: "🌱" };
+const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", harvest: "Harvest", sowing: "Sowing" };
+
+function renderLogs(logs) {
+    const container = document.getElementById("logList");
+    if (!logs.length) {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No logs yet.</p>';
+        return;
+    }
+    container.innerHTML = logs.map(log => {
+        const isHome = log.projectLocation === "home";
+        const icon  = CATEGORY_ICON[log.activityCategory]  || "📝";
+        const label = CATEGORY_LABEL[log.activityCategory] || log.activityCategory;
+        const financials = (log.costRM || log.revenueRM) ? `
+            <div class="log-financials">
+                ${log.costRM    ? `<span>Cost: RM ${parseFloat(log.costRM).toFixed(2)}</span>`    : ""}
+                ${log.revenueRM ? `<span>Revenue: RM ${parseFloat(log.revenueRM).toFixed(2)}</span>` : ""}
+            </div>` : "";
+        return `
+        <div class="log-card">
+            <div class="log-header">
+                <span class="log-icon">${icon}</span>
+                <div class="log-meta">
+                    <p class="log-title">${label}</p>
+                    <p class="log-date">${log.date} &middot; <span class="tag ${isHome ? "home" : ""}">${isHome ? "Home" : "Commercial"}</span></p>
+                </div>
+            </div>
+            ${log.inputsUsed ? `<p class="log-inputs">${log.inputsUsed}</p>` : ""}
+            ${financials}
+        </div>`;
+    }).join("");
+}
+
+async function fetchLogs() {
+    const container = document.getElementById("logList");
+    container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>';
+    try {
+        const res = await fetch(GOOGLE_SCRIPT_URL + "?action=getLogs");
+        const data = await res.json();
+        renderLogs(data.logs || []);
+    } catch (e) {
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load logs.</p>';
+    }
+}
+
+// --- 9. App Initialization & Listeners ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {
     updateSyncBadge();
     processOfflineQueue();
     fetchBatches();
+
+    document.querySelectorAll(".nav-btn[data-view]").forEach(btn => {
+        btn.addEventListener("click", () => switchView(btn.dataset.view));
+    });
 
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js")

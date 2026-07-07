@@ -372,6 +372,70 @@ textarea {
   transform: translateX(-50%) translateY(0);
 }
 
+/* ---------- Log cards ---------- */
+.log-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-bottom: 12px;
+}
+
+.log-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.log-icon {
+  font-size: 28px;
+  line-height: 1;
+  flex-shrink: 0;
+}
+
+.log-meta {
+  flex: 1;
+  min-width: 0;
+}
+
+.log-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin: 0 0 2px;
+}
+
+.log-date {
+  font-size: 13px;
+  color: #555555;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.log-date .tag {
+  font-size: 11px;
+  padding: 2px 7px;
+}
+
+.log-inputs {
+  font-size: 13px;
+  color: #444444;
+  margin: 10px 0 0;
+  padding-top: 10px;
+  border-top: 1px solid var(--color-border);
+}
+
+.log-financials {
+  display: flex;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-primary-dark);
+}
+
 /* ---------- Validation error state ---------- */
 input.invalid,
 select.invalid,
