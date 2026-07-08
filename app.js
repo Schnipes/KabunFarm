@@ -356,19 +356,34 @@ async function processOfflineQueue() {
             const queue = getOfflineLogs();
             if (!queue.length) break;
             const item = queue[0];
+
+            let result;
             try {
-                await fetch(GOOGLE_SCRIPT_URL, {
-                    method: "POST",
-                    mode:   "no-cors",
-                    headers: { "Content-Type": "application/json" },
-                    body:   JSON.stringify(item)
+                // text/plain keeps this a "simple" request (no CORS preflight, which
+                // Apps Script can't answer) while still letting us READ the reply.
+                const res = await fetch(GOOGLE_SCRIPT_URL, {
+                    method:  "POST",
+                    headers: { "Content-Type": "text/plain;charset=utf-8" },
+                    body:    JSON.stringify(item)
                 });
+                if (!res.ok) throw new Error("HTTP " + res.status);
+                result = await res.json();
             } catch (err) {
+                // Couldn't reach the server or read its reply — keep the item and
+                // retry later. This is the normal offline / flaky-signal path.
                 console.error("Sync failed, will retry later.", err);
                 break;
             }
-            // Re-read fresh: actions queued during the await must survive.
-            // FIFO + append-only means index 0 is still the item we just sent.
+
+            if (result && result.error) {
+                // Server understood the request and rejected it — retrying can't
+                // help, so drop it rather than let it block the rest of the queue.
+                console.error("Server rejected queued action, dropping:", result.error, item);
+            }
+
+            // Confirmed handled (success, or a permanent rejection just logged):
+            // remove exactly this item. FIFO + append-only means index 0 is still
+            // the item we sent, so anything queued during the await survives.
             const fresh = getOfflineLogs();
             fresh.shift();
             localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
