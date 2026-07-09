@@ -1708,8 +1708,12 @@ async function fetchTasks() {
         const res  = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getTasks"));
         const data = await res.json();
         if (data.tasks) {
-            tasksData = data.tasks;
-            localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(data.tasks));
+            // Sheets cells formatted as Date arrive as full-ISO timestamps once
+            // JSON-serialized by Apps Script, not the plain "YYYY-MM-DD" the form
+            // wrote — normalize here so every date-based lookup downstream (Today's
+            // Tasks, Plan view's day grouping) keeps matching after a refresh.
+            tasksData = data.tasks.map(t => ({ ...t, date: ymd(t.date) }));
+            localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
             renderPlanView();
             if (typeof renderTodayTasks === "function") renderTodayTasks();
         }
