@@ -8,7 +8,25 @@ const LAST_BED_KEY       = "farmlog_last_bed";
 const BED_MAX_KEY        = "farmlog_bed_max";
 const AUTH_TOKEN_KEY     = "farmlog_auth_token";
 const CATEGORY_COLOR_KEY = "farmlog_category_colors";
+const WEATHER_CACHE_KEY  = "farmlog_weather_cache";
+const TASKS_CACHE_KEY    = "farmlog_tasks_cache";
 const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
+
+// Kudat, Sabah — hardcoded since this is a single-farm app.
+const FARM_LAT = 6.887;
+const FARM_LON = 116.825;
+const WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${FARM_LAT}&longitude=${FARM_LON}&timezone=auto&current=temperature_2m,weather_code&daily=precipitation_probability_max,weather_code&forecast_days=4`;
+
+// WMO weather codes -> emoji. Collapses the full table into the handful of
+// conditions that actually matter for a farm (clear/cloud/rain/storm).
+function weatherIcon(code) {
+    if (code === 0) return "☀️";
+    if (code >= 1 && code <= 3) return "⛅";
+    if (code === 45 || code === 48) return "🌫️";
+    if ((code >= 51 && code <= 65) || (code >= 80 && code <= 82)) return "🌧️";
+    if (code >= 95) return "⛈️";
+    return "⛅";
+}
 
 // Preset palette for formula-category tags. Kept small and fixed (not a full
 // color picker) so choices stay visually consistent across the app.
@@ -39,9 +57,15 @@ const DEFAULT_CATEGORY = {
 
 const CATEGORY_ICON  = { watering: "💧", pest_control: "🐛", harvest: "🧺", sowing: "🌱", sale: "💰" };
 const CATEGORY_LABEL = { watering: "Watering", pest_control: "Pest Control", harvest: "Harvest", sowing: "Sowing", sale: "Sale" };
+const TIME_SLOT_ORDER = { Morning: 0, Afternoon: 1, Evening: 2, Anytime: 3 };
+// Short forms shown on the compact Today's Tasks row — same vocabulary as the
+// Add Task modal's pill picker, just abbreviated for a one-line list.
+const TIME_SLOT_SHORT = { Morning: "Morn", Afternoon: "Aft", Evening: "Eve", Anytime: "Any" };
 
 let bedsData          = [];
 let formulasData      = [];
+let tasksData         = [];
+let selectedTaskFormulaId = null;
 // Highest bed number ever used (retired beds included). Persisted so numbers
 // are never reused, even across reloads while offline.
 let maxBedNumber      = parseInt(localStorage.getItem(BED_MAX_KEY), 10) || 0;
@@ -444,6 +468,18 @@ function handleSubmit(event) {
     localStorage.setItem(LAST_BED_KEY, bedScope);
     updateSyncBadge();
 
+    // Auto-complete a matching pre-planned task — logging the real activity
+    // through the normal flow silently checks it off, no separate manual tap.
+    // "all" (whole-farm) logs match tasks with no bed set the same way.
+    const taskBedKey = bedScope === "all" ? "" : bedScope;
+    const matchingTask = tasksData.find(t =>
+        String(t.bedNumber || "") === String(taskBedKey) &&
+        t.date === date &&
+        t.activityCategory === activity &&
+        t.status !== "done"
+    );
+    if (matchingTask) toggleTaskDone(matchingTask.id);
+
     // Optimistically update lastActivity on the bed card
     if (bedScope !== "all") {
         const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
@@ -537,6 +573,7 @@ function switchView(viewName) {
     if (formulasBtn) formulasBtn.classList.toggle("active", viewName === "formulas");
     if (viewName === "data") { renderBedFilterChips(); renderTypeFilterChips(); renderFinancialSummary(); renderCropPL(); fetchLogs(); }
     if (viewName === "formulas") fetchFormulas();
+    if (viewName === "plan") fetchTasks();
 }
 
 // --- 9. Beds (Home Screen) ---
@@ -804,6 +841,74 @@ async function fetchBeds() {
     } catch (e) {
         console.error("Could not load beds:", e);
     }
+}
+
+// Third-party public API, unrelated to GOOGLE_SCRIPT_URL — no auth token needed.
+async function fetchWeather() {
+    const cached = localStorage.getItem(WEATHER_CACHE_KEY);
+    if (cached) {
+        try {
+            const parsed = JSON.parse(cached);
+            renderWeather(parsed.data);
+            if (Date.now() - parsed.fetchedAt < 60 * 60 * 1000) return; // fresh within the hour
+        } catch (e) { /* ignore corrupt cache */ }
+    }
+    try {
+        const res  = await fetch(WEATHER_URL);
+        const data = await res.json();
+        if (data.current && data.daily) {
+            localStorage.setItem(WEATHER_CACHE_KEY, JSON.stringify({ data, fetchedAt: Date.now() }));
+            renderWeather(data);
+        }
+    } catch (e) {
+        console.error("Could not load weather:", e);
+    }
+}
+
+function renderWeather(data) {
+    const container = document.getElementById("weatherCard");
+    if (!container || !data.current || !data.daily) return;
+
+    const temp        = Math.round(data.current.temperature_2m);
+    const icon         = weatherIcon(data.current.weather_code);
+    const todayRain    = data.daily.precipitation_probability_max[0];
+    const todayWeekday = new Date().toLocaleDateString("en-MY", { weekday: "short" });
+
+    const dayStrip = [1, 2, 3].map(i => {
+        const dateStr = data.daily.time[i];
+        if (!dateStr) return "";
+        const dayLabel = new Date(dateStr + "T00:00:00").toLocaleDateString("en-MY", { weekday: "short" });
+        return `
+        <div class="weather-day-col">
+            <span class="d-label">${dayLabel}</span>
+            <span class="d-icon">${weatherIcon(data.daily.weather_code[i])}</span>
+            <span class="d-pct">${data.daily.precipitation_probability_max[i]}%</span>
+        </div>`;
+    }).join("");
+
+    // Tie-in with the existing watering alert: only worth a mention if rain
+    // is likely AND a bed is actually flagged as needing water.
+    const hintBed = todayRain >= 40 ? bedsData.find(b => wateringAlert(b) !== "") : null;
+    const hint = hintBed ? `
+        <div class="weather-hint">
+            <span>🌧️</span>
+            <span>Rain likely today — Bed ${escapeHtml(String(hintBed.bedNumber))} may not need watering.</span>
+        </div>` : "";
+
+    container.innerHTML = `
+        <div class="weather-main-row">
+            <span class="weather-icon-big">${icon}</span>
+            <div class="weather-temp-block">
+                <span class="weather-temp">${temp}°</span>
+                <span class="weather-sub">${todayWeekday} · Farm weather</span>
+            </div>
+            <div class="weather-rain-pill">
+                <div class="weather-rain-pct">${todayRain}%</div>
+                <div class="weather-rain-label">Rain today</div>
+            </div>
+        </div>
+        <div class="weather-forecast-strip">${dayStrip}</div>
+        ${hint}`;
 }
 
 // --- 10. Formulas Tab ---
@@ -1480,7 +1585,255 @@ function deleteFormula(index) {
     showToast(`Formula deleted`);
 }
 
-// --- 15. App Initialization ---
+// --- 15. Task Planning (Plan tab) ---
+async function fetchTasks() {
+    const cached = localStorage.getItem(TASKS_CACHE_KEY);
+    if (cached) {
+        try {
+            tasksData = JSON.parse(cached);
+            renderPlanView();
+        } catch (e) { /* ignore corrupt cache */ }
+    }
+    try {
+        const res  = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getTasks"));
+        const data = await res.json();
+        if (data.tasks) {
+            tasksData = data.tasks;
+            localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(data.tasks));
+            renderPlanView();
+            if (typeof renderTodayTasks === "function") renderTodayTasks();
+        }
+    } catch (e) {
+        console.error("Could not load tasks:", e);
+    }
+}
+
+// Forward-looking day label (today + weekday name) — distinct from the
+// Activity tab's dateGroupLabel, which is backward-looking (Today/Yesterday
+// only, no weekday for anything else). A week-ahead plan needs weekday names.
+function planDayLabel(dateStr) {
+    if (dateStr === todayString()) return "Today · " + shortDate(dateStr);
+    const weekday = new Date(dateStr + "T00:00:00").toLocaleDateString("en-MY", { weekday: "short" });
+    return weekday + " · " + shortDate(dateStr);
+}
+
+function renderTaskCard(task) {
+    const formula = task.formulaId ? formulasData.find(f => String(f.id) === String(task.formulaId)) : null;
+    const isDone  = task.status === "done";
+    const color   = formula ? getCategoryColor(formula.category) : null;
+    const tag     = formula && formula.category
+        ? `<span class="tag"${color ? ` style="${tintStyle(color)}"` : ""}>${escapeHtml(formula.category)}</span>`
+        : "";
+    const slotPill = task.timeSlot && task.timeSlot !== "Anytime"
+        ? `<span class="slot-pill">${escapeHtml(task.timeSlot)}</span>` : "";
+
+    const title = formula ? formula.name : "Task";
+    const descParts = [];
+    if (formula && formula.description) descParts.push(formula.description);
+    if (task.note) descParts.push(task.note);
+    const desc = descParts.join(" — ");
+    const bedLine = task.bedNumber ? `<p class="task-bed">Bed ${escapeHtml(String(task.bedNumber))}</p>` : "";
+
+    return `
+    <div class="task-card">
+        <button class="task-check${isDone ? " done" : ""}" onclick="toggleTaskDone('${escapeHtml(String(task.id))}')">${isDone ? "✓" : ""}</button>
+        <div class="task-main">
+            <div class="task-top-row">${slotPill}${tag}</div>
+            <p class="task-title${isDone ? " done-text" : ""}">${escapeHtml(title)}</p>
+            ${desc ? `<p class="task-desc">${escapeHtml(desc)}</p>` : ""}
+            ${bedLine}
+        </div>
+    </div>`;
+}
+
+function renderPlanView() {
+    const container = document.getElementById("planTaskList");
+    if (!container) return;
+
+    const start = new Date(); start.setHours(0, 0, 0, 0);
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+        const d = new Date(start); d.setDate(start.getDate() + i);
+        days.push(localDateStr(d));
+    }
+
+    const byDate = {};
+    tasksData.forEach(t => {
+        if (!byDate[t.date]) byDate[t.date] = [];
+        byDate[t.date].push(t);
+    });
+
+    container.innerHTML = days.map(dateStr => {
+        const dayTasks = (byDate[dateStr] || []).slice().sort((a, b) =>
+            (TIME_SLOT_ORDER[a.timeSlot] ?? 3) - (TIME_SLOT_ORDER[b.timeSlot] ?? 3)
+        );
+        const heading = `<div class="day-heading">${planDayLabel(dateStr)}</div>`;
+        if (!dayTasks.length) return heading + `<div class="empty-day">Nothing planned</div>`;
+        return heading + dayTasks.map(renderTaskCard).join("");
+    }).join("");
+}
+
+// --- Today's Tasks (Home) — compact glance list, not the full detail view ---
+function renderTodayTaskRow(task) {
+    const formula = task.formulaId ? formulasData.find(f => String(f.id) === String(task.formulaId)) : null;
+    const isDone  = task.status === "done";
+    const color   = formula ? getCategoryColor(formula.category) : null;
+    const icon    = CATEGORY_ICON[task.activityCategory] || "📝";
+    const title   = formula ? formula.name : (task.note || "Task");
+    const bedMeta = task.bedNumber ? `Bed ${escapeHtml(String(task.bedNumber))}` : "Whole Farm";
+    const slotShort = task.timeSlot && task.timeSlot !== "Anytime" ? TIME_SLOT_SHORT[task.timeSlot] : "";
+    const meta = slotShort ? `${bedMeta} · ${slotShort}` : bedMeta;
+
+    return `
+    <div class="task-row${isDone ? " is-done" : ""}" style="border-left-color:${color || "var(--color-border)"};">
+        <button class="task-check-mini${isDone ? " done" : ""}" onclick="toggleTaskDone('${escapeHtml(String(task.id))}')"><span class="check-dot">${isDone ? "✓" : ""}</span></button>
+        <span class="task-row-icon">${icon}</span>
+        <span class="task-row-title${isDone ? " done-text" : ""}">${escapeHtml(title)}</span>
+        <span class="task-row-meta">${escapeHtml(meta)}</span>
+    </div>`;
+}
+
+function renderTodayTasks() {
+    const container  = document.getElementById("todayTasksList");
+    const dateLabel  = document.getElementById("todayTasksDate");
+    if (!container) return;
+    if (dateLabel) dateLabel.textContent = shortDate(todayString());
+
+    const today = todayString();
+    const todays = tasksData
+        .filter(t => t.date === today)
+        .sort((a, b) => (TIME_SLOT_ORDER[a.timeSlot] ?? 3) - (TIME_SLOT_ORDER[b.timeSlot] ?? 3))
+        // Stable sort (ES2019+): pending tasks stay first, completed ones sink
+        // to the bottom without losing their time-slot order within each group.
+        .sort((a, b) => (a.status === "done" ? 1 : 0) - (b.status === "done" ? 1 : 0));
+
+    if (!todays.length) {
+        container.innerHTML = '<div class="empty-today">Nothing planned for today</div>';
+        return;
+    }
+    container.innerHTML = `<div class="today-list">${todays.map(renderTodayTaskRow).join("")}</div>`;
+}
+
+// Shared by the Plan tab's task-check and Today's Tasks' compact
+// checkbox — optimistic local flip + queued sync, same shape as saveBedName().
+function toggleTaskDone(taskId) {
+    const task = tasksData.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+    const newStatus = task.status === "done" ? "active" : "done";
+    task.status = newStatus;
+    localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
+    renderPlanView();
+    if (typeof renderTodayTasks === "function") renderTodayTasks();
+    queueAction({ action: "updateTaskStatus", id: task.id, status: newStatus });
+    processOfflineQueue();
+}
+
+function selectTaskSlot(btn) {
+    document.querySelectorAll("#taskSlotRow .pill-choice").forEach(b => b.classList.remove("selected"));
+    btn.classList.add("selected");
+}
+
+function selectTaskFormula(id) {
+    selectedTaskFormulaId = selectedTaskFormulaId === id ? null : id;
+    populateTaskFormulaList();
+}
+
+function populateTaskFormulaList() {
+    const container = document.getElementById("taskFormulaList");
+    if (!formulasData.length) {
+        container.innerHTML = '<p style="color:#888;font-size:13px;padding:6px 0;">No formulas yet.</p>';
+        return;
+    }
+    container.innerHTML = formulasData.map(f => `
+        <div class="formula-pick-item${selectedTaskFormulaId === f.id ? " selected" : ""}" onclick="selectTaskFormula('${escapeHtml(String(f.id))}')">
+            <span class="formula-pick-name">${escapeHtml(f.name)}</span>
+            ${f.category ? `<span class="formula-pick-cat">${escapeHtml(f.category)}</span>` : ""}
+        </div>`
+    ).join("");
+}
+
+function openTaskModal() {
+    document.getElementById("taskDate").value = todayString();
+    document.getElementById("taskNote").value = "";
+    document.getElementById("taskRepeat").checked = false;
+    document.getElementById("taskActivityCategory").value = "";
+    document.getElementById("taskDate").classList.remove("invalid");
+    selectedTaskFormulaId = null;
+
+    document.querySelectorAll("#taskSlotRow .pill-choice").forEach(b =>
+        b.classList.toggle("selected", b.dataset.slot === "Anytime")
+    );
+
+    const bedSelect = document.getElementById("taskBed");
+    while (bedSelect.options.length > 1) bedSelect.remove(1);
+    bedsData.forEach(bed => {
+        const opt = document.createElement("option");
+        opt.value = bed.bedNumber;
+        opt.textContent = "Bed " + bed.bedNumber;
+        bedSelect.appendChild(opt);
+    });
+
+    populateTaskFormulaList();
+
+    document.getElementById("taskModalOverlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+function closeTaskModal() {
+    document.getElementById("taskModalOverlay").classList.remove("open");
+    document.body.style.overflow = "";
+}
+
+document.getElementById("taskModalOverlay").addEventListener("click", function (e) {
+    if (e.target === this) closeTaskModal();
+});
+
+function handleTaskSubmit(event) {
+    event.preventDefault();
+
+    const date = document.getElementById("taskDate").value;
+    document.getElementById("taskDate").classList.toggle("invalid", !date);
+    if (!date) {
+        showToast("Please pick a date.");
+        return;
+    }
+
+    const slotBtn  = document.querySelector("#taskSlotRow .pill-choice.selected");
+    const timeSlot = slotBtn ? slotBtn.dataset.slot : "Anytime";
+    const bedNumber = document.getElementById("taskBed").value;
+    const activityCategory = document.getElementById("taskActivityCategory").value;
+    const note   = document.getElementById("taskNote").value.trim();
+    const repeat = document.getElementById("taskRepeat").checked;
+
+    const dayCount   = repeat ? 7 : 1;
+    const startDate  = new Date(date + "T00:00:00");
+
+    for (let i = 0; i < dayCount; i++) {
+        const d = new Date(startDate);
+        d.setDate(startDate.getDate() + i);
+        const newTask = {
+            id:               "task_" + Date.now() + "_" + i,
+            date:             localDateStr(d),
+            timeSlot,
+            bedNumber,
+            activityCategory,
+            formulaId:        selectedTaskFormulaId || "",
+            note,
+            status:           "active"
+        };
+        tasksData.push(newTask);
+        queueAction({ action: "addTask", ...newTask });
+    }
+
+    localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
+    renderPlanView();
+    if (typeof renderTodayTasks === "function") renderTodayTasks();
+    closeTaskModal();
+    showToast(repeat ? "Tasks added for the week" : "Task added");
+    processOfflineQueue();
+}
+
+// --- 16. App Initialization ---
 window.addEventListener("online", processOfflineQueue);
 
 document.addEventListener("DOMContentLoaded", () => {
@@ -1490,7 +1843,9 @@ document.addEventListener("DOMContentLoaded", () => {
     processOfflineQueue().finally(() => {
         fetchBeds();
         fetchFormulas();
+        fetchTasks();
     });
+    fetchWeather(); // third-party API, independent of the offline queue/auth gate
 
     document.getElementById("activityCategory").addEventListener("change", updateBedFields);
     document.getElementById("bedScope").addEventListener("change", updateBedFields);
@@ -1532,6 +1887,7 @@ document.addEventListener("DOMContentLoaded", () => {
         if (pull >= PTR_THRESHOLD) {
             fetchBeds();
             fetchLogs();
+            fetchWeather();
         }
     }, { passive: true });
 

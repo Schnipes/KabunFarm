@@ -556,6 +556,117 @@ textarea {
   font-weight: 500;
 }
 
+/* ---------- Today's Tasks (Home) — compact glance list ---------- */
+.today-date {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #999;
+  font-size: 11px;
+}
+.today-list {
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 16px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+.task-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 9px 12px;
+  border-left: 4px solid var(--color-border);
+  border-bottom: 1px solid var(--color-border);
+  background: var(--color-bg);
+  transition: border-left-color .25s ease, opacity .25s ease;
+}
+.task-row:last-child { border-bottom: none; }
+.task-row.is-done { opacity: 0.65; border-left-color: var(--color-border) !important; }
+
+/* Bigger invisible tap zone (~40px) around a smaller visible dot (~20px) —
+   keeps the list compact while the hit target stays realistically tappable
+   in the field (the app already commits to --tap-min: 56px elsewhere; this
+   is the practical minimum for a dense checklist row). */
+.task-check-mini {
+  width: 40px; height: 40px;
+  margin: -9px -8px -9px -2px;
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; cursor: pointer; padding: 0; flex-shrink: 0;
+}
+.task-check-mini .check-dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--color-border); background: var(--color-bg);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; color: transparent;
+  transition: background .15s ease, border-color .15s ease;
+}
+.task-check-mini.done .check-dot { background: var(--color-primary); border-color: var(--color-primary); color: #fff; }
+
+.task-row-icon { font-size: 14px; flex-shrink: 0; }
+.task-row-title {
+  font-size: 14px; font-weight: 600; color: var(--color-text);
+  flex: 1; min-width: 0;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.task-row-title.done-text { text-decoration: line-through; color: #999; }
+.task-row-meta {
+  font-size: 11.5px; color: #999; white-space: nowrap; flex-shrink: 0;
+}
+.empty-today {
+  font-size: 12.5px; color: #999; font-style: italic;
+  padding: 2px 2px 16px;
+}
+
+/* ---------- Weather (Home) ---------- */
+.weather-card {
+  background: linear-gradient(155deg, #eef6fb, var(--color-bg) 60%);
+  border: 1px solid #d3e6f2;
+  border-radius: var(--radius);
+  padding: 13px 14px 11px;
+  margin-bottom: 16px;
+  min-height: 40px;
+}
+.weather-main-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.weather-icon-big { font-size: 30px; line-height: 1; }
+.weather-temp-block { display: flex; flex-direction: column; }
+.weather-temp { font-size: 20px; font-weight: 700; color: var(--color-text); line-height: 1.1; }
+.weather-sub { font-size: 11px; color: #999; }
+.weather-rain-pill { margin-left: auto; text-align: right; }
+.weather-rain-pct {
+  font-size: 20px; font-weight: 700;
+  color: var(--color-accent-water);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+.weather-rain-label {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: 0.04em; color: var(--color-accent-water);
+}
+.weather-forecast-strip {
+  display: flex;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid #d3e6f2;
+}
+.weather-day-col {
+  flex: 1;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+}
+.weather-day-col .d-label { font-size: 10.5px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.03em; }
+.weather-day-col .d-icon { font-size: 17px; margin: 1px 0; }
+.weather-day-col .d-pct { font-size: 11px; color: var(--color-accent-water); font-weight: 600; font-variant-numeric: tabular-nums; }
+.weather-hint {
+  display: flex; align-items: flex-start; gap: 6px;
+  margin-top: 11px; padding-top: 10px; border-top: 1px solid #d3e6f2;
+  font-size: 12px; color: #3d6a85; line-height: 1.4;
+}
+
 /* ---------- Pull-to-refresh ---------- */
 #ptrIndicator {
   overflow: hidden;
@@ -1057,6 +1168,136 @@ textarea {
   color: #888;
   text-align: right;
   flex-shrink: 0;
+}
+
+.formula-pick-item.selected {
+  border-color: var(--color-primary);
+  background: #f2f9f4;
+  cursor: pointer;
+}
+#taskFormulaList .formula-pick-item {
+  cursor: pointer;
+}
+
+/* ---------- Pill choice (time slot picker) ---------- */
+.pill-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.pill-choice {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 7px 12px;
+  border-radius: 999px;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  color: #555;
+  cursor: pointer;
+  font-family: inherit;
+}
+.pill-choice.selected {
+  border-color: var(--color-primary);
+  background: #e4f4e8;
+  color: var(--color-primary-dark);
+}
+
+.task-repeat-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  color: var(--color-text);
+  margin-bottom: 20px;
+}
+.task-repeat-row input {
+  width: 18px;
+  height: 18px;
+  accent-color: var(--color-primary);
+}
+
+/* ---------- Plan tab: day-grouped task cards ---------- */
+.day-heading {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--color-text);
+  padding: 12px 2px 6px;
+}
+.day-heading .date-sub { color: #999; font-weight: 400; }
+
+.empty-day {
+  font-size: 12px;
+  color: #aaa;
+  padding: 0 2px 14px;
+  font-style: italic;
+}
+
+.task-card {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+.task-check {
+  width: 22px; height: 22px;
+  border-radius: 50%;
+  border: 2px solid var(--color-border);
+  background: var(--color-bg);
+  flex-shrink: 0;
+  margin-top: 1px;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 12px;
+  color: transparent;
+  font-family: inherit;
+  padding: 0;
+  transition: background .15s ease, border-color .15s ease;
+}
+.task-check.done {
+  background: var(--color-primary);
+  border-color: var(--color-primary);
+  color: #fff;
+}
+.task-main { flex: 1; min-width: 0; }
+.task-top-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  margin-bottom: 4px;
+}
+.slot-pill {
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #7a7f7a;
+  background: var(--color-bg);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  padding: 2px 8px;
+}
+.task-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 3px;
+}
+.task-title.done-text { text-decoration: line-through; color: #999; }
+.task-desc {
+  font-size: 12.5px;
+  color: #666;
+  line-height: 1.45;
+  margin: 0;
+}
+.task-bed {
+  font-size: 11px;
+  color: #999;
+  margin-top: 4px;
 }
 
 /* ---------- Financial summary card ---------- */

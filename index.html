@@ -51,6 +51,17 @@
     <!-- Home View -->
     <div id="view-home" class="view">
 
+      <!-- Today's Tasks -->
+      <section aria-label="Today's tasks">
+        <p class="section-label">Today's Tasks <span class="today-date" id="todayTasksDate"></span></p>
+        <div id="todayTasksList"></div>
+      </section>
+
+      <!-- Weather forecast -->
+      <section aria-label="Weather forecast">
+        <div id="weatherCard" class="weather-card"></div>
+      </section>
+
       <!-- Beds first — primary content -->
       <section aria-label="Active beds">
         <div class="section-header">
@@ -152,12 +163,29 @@
         <div id="cropPLList"></div>
       </section>
     </div>
+
+    <!-- Plan View -->
+    <div id="view-plan" class="view" hidden>
+      <section aria-label="Task planning">
+        <div class="section-header">
+          <p class="section-label">Plan</p>
+          <button class="add-bed-btn" onclick="openTaskModal()">+ Add task</button>
+        </div>
+        <div id="planTaskList">
+          <p style="color:#888;font-size:14px;padding:8px 4px;">Loading tasks...</p>
+        </div>
+      </section>
+    </div>
   </main>
 
   <nav class="bottom-nav" aria-label="Primary">
     <button class="nav-btn active" data-view="home">
       <span class="nav-icon" aria-hidden="true">🏠</span>
       <span>Home</span>
+    </button>
+    <button class="nav-btn" data-view="plan">
+      <span class="nav-icon" aria-hidden="true">🗓️</span>
+      <span>Plan</span>
     </button>
     <button class="nav-btn" data-view="data">
       <span class="nav-icon" aria-hidden="true">📊</span>
@@ -324,6 +352,68 @@
         </div>
 
         <button type="submit" class="submit-btn">Save sale</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Task Modal -->
+  <div class="modal-overlay" id="taskModalOverlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Add Task</h2>
+        <button class="modal-close" onclick="closeTaskModal()" aria-label="Close">✕</button>
+      </div>
+      <form id="taskForm" onsubmit="handleTaskSubmit(event)" novalidate>
+
+        <div class="form-field">
+          <label for="taskDate">Date</label>
+          <input type="date" id="taskDate" required>
+        </div>
+
+        <div class="form-field">
+          <label>Time slot</label>
+          <div class="pill-row" id="taskSlotRow">
+            <button type="button" class="pill-choice" data-slot="Morning" onclick="selectTaskSlot(this)">Morning</button>
+            <button type="button" class="pill-choice" data-slot="Afternoon" onclick="selectTaskSlot(this)">Afternoon</button>
+            <button type="button" class="pill-choice" data-slot="Evening" onclick="selectTaskSlot(this)">Evening</button>
+            <button type="button" class="pill-choice selected" data-slot="Anytime" onclick="selectTaskSlot(this)">Anytime</button>
+          </div>
+        </div>
+
+        <div class="form-field">
+          <label for="taskBed">Bed <span class="hint">optional</span></label>
+          <select id="taskBed">
+            <option value="">Whole Farm</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="taskActivityCategory">Activity type <span class="hint">optional — lets logging the real activity auto-check this task</span></label>
+          <select id="taskActivityCategory">
+            <option value="">Reminder only (no auto-check)</option>
+            <option value="sowing">Sowing</option>
+            <option value="watering">Watering</option>
+            <option value="pest_control">Pest control</option>
+            <option value="harvest">Harvest</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label>Link to formula <span class="hint">optional — pulls in category, color &amp; dosage</span></label>
+          <div id="taskFormulaList" class="formula-picker-list"></div>
+        </div>
+
+        <div class="form-field">
+          <label for="taskNote">Note <span class="hint">optional, added on top of the formula's own instructions</span></label>
+          <textarea id="taskNote" placeholder="e.g. focus on the eggplant row this time"></textarea>
+        </div>
+
+        <label class="task-repeat-row">
+          <input type="checkbox" id="taskRepeat">
+          Repeat daily this week
+        </label>
+
+        <button type="submit" class="submit-btn">Save task</button>
       </form>
     </div>
   </div>
