@@ -293,7 +293,7 @@ function updateBedFields() {
     // Update bed context bar
     const contextBar = document.getElementById("bedContextBar");
     if (isSpecific) {
-        const bed = bedsData.find(b => String(b.bedNumber) === String(scope));
+        const bed = getBed(scope);
         if (bed && bed.crops.length) {
             contextBar.innerHTML = bed.crops.map(c =>
                 `<span>🌱 ${escapeHtml(c.cropName)} · Day ${daysSince(c.plantingDate)}</span>`
@@ -308,7 +308,7 @@ function updateBedFields() {
 
     if (!isSpecific) return;
 
-    const bed = bedsData.find(b => String(b.bedNumber) === String(scope));
+    const bed = getBed(scope);
 
     if (isSowing) {
         document.getElementById("newCropField").hidden  = false;
@@ -338,6 +338,13 @@ function updateBedFields() {
 // --- 6. Offline Storage ---
 function saveBeds() {
     localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
+}
+
+// Single front door for "find this bed" — was 10 separate copies of
+// `bedsData.find(b => String(b.bedNumber) === String(x))` scattered through
+// the file. One place to fix if the lookup rule ever needs to change.
+function getBed(bedNumber) {
+    return bedsData.find(b => String(b.bedNumber) === String(bedNumber));
 }
 
 function queueAction(payload) {
@@ -427,7 +434,7 @@ function handleSubmit(event) {
         cropName:         activity === "sowing"  ? cropName :
                            activity === "harvest" ? harvestedCropNames.join(", ") : (() => {
             if (bedScope === "all") return "";
-            const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+            const bed = getBed(bedScope);
             return bed && bed.crops.length ? bed.crops.map(c => c.cropName).join(", ") : "";
         })(),
         inputsUsed:       document.getElementById("inputsUsed").value,
@@ -452,7 +459,7 @@ function handleSubmit(event) {
         });
         // Optimistic update — add crop to bed immediately (carry the batch id
         // so it can be harvested precisely before the next refetch).
-        const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+        const bed = getBed(bedScope);
         if (bed) bed.crops.push({ id: batchId, cropName, plantingDate: date });
         saveBeds();
         renderBeds(bedsData);
@@ -472,7 +479,7 @@ function handleSubmit(event) {
                 harvestDate: date,
                 status:      "done"
             });
-            const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+            const bed = getBed(bedScope);
             if (bed) {
                 // Remove the specific batch; fall back to name if id is missing
                 // (crop sown this session, not yet refetched with an id).
@@ -511,7 +518,7 @@ function handleSubmit(event) {
 
     // Optimistically update lastActivity on the bed card
     if (bedScope !== "all") {
-        const bed = bedsData.find(b => String(b.bedNumber) === String(bedScope));
+        const bed = getBed(bedScope);
         if (bed) {
             bed.lastActivity = { type: activity, date };
             if (activity === "watering") bed.lastWatered = date;
@@ -642,8 +649,11 @@ function latestWholeFarmWatering() {
     return latest || null;
 }
 
-function wateringAlert(bed) {
-    if (!bed.crops.length) return "";
+// Pure decision, no HTML — returns a plain data value so anything (a bed
+// card, a future plot rollup like "6 of 24 beds") can reuse the same rule
+// without re-deriving it or parsing a rendered string.
+function getWateringStatus(bed) {
+    if (!bed.crops.length) return { needsWater: false, days: null };
     // Tracks watering specifically (server-computed lastWatered), not just
     // "days since the most recent activity of any kind" — otherwise logging
     // e.g. pest control the day after watering would wrongly reset this.
@@ -654,11 +664,17 @@ function wateringAlert(bed) {
     if (farmWide && (!lastWatered || farmWide > lastWatered)) lastWatered = farmWide;
 
     const days = lastWatered ? daysSince(lastWatered) : null;
-    if (!lastWatered || days >= 3) {
-        const msg = !lastWatered ? "Not watered recently" : `Not watered in ${days}d`;
-        return `<p class="bed-water-alert">💧 ${msg}</p>`;
-    }
-    return "";
+    const needsWater = !lastWatered || days >= 3;
+    return { needsWater, days };
+}
+
+// Thin rendering wrapper over getWateringStatus() — same markup/behavior as
+// before the split, just no longer where the actual decision lives.
+function wateringAlert(bed) {
+    const status = getWateringStatus(bed);
+    if (!status.needsWater) return "";
+    const msg = status.days === null ? "Not watered recently" : `Not watered in ${status.days}d`;
+    return `<p class="bed-water-alert">💧 ${msg}</p>`;
 }
 
 function daysSince(dateStr) {
@@ -727,7 +743,7 @@ function renderBeds(beds) {
 }
 
 function openBedDetail(bedNum) {
-    const bed = bedsData.find(b => String(b.bedNumber) === String(bedNum));
+    const bed = getBed(bedNum);
     if (!bed) return;
 
     selectedBedForLog = bedNum;
@@ -789,7 +805,7 @@ function toggleBedRename() {
     const row = document.getElementById("bedRenameRow");
     row.hidden = !row.hidden;
     if (!row.hidden) {
-        const bed = bedsData.find(b => String(b.bedNumber) === String(selectedBedForLog));
+        const bed = getBed(selectedBedForLog);
         document.getElementById("bedNameInput").value = bed?.name || "";
         document.getElementById("bedNameInput").focus();
     }
@@ -797,7 +813,7 @@ function toggleBedRename() {
 
 function saveBedName() {
     const name = document.getElementById("bedNameInput").value.trim();
-    const bed  = bedsData.find(b => String(b.bedNumber) === String(selectedBedForLog));
+    const bed  = getBed(selectedBedForLog);
     if (!bed) return;
 
     bed.name = name;
@@ -814,7 +830,7 @@ function saveBedName() {
 }
 
 function deleteBed() {
-    const bed = bedsData.find(b => String(b.bedNumber) === String(selectedBedForLog));
+    const bed = getBed(selectedBedForLog);
     if (!bed) return;
     const label = bed.name ? `Bed ${bed.bedNumber} · ${bed.name}` : `Bed ${bed.bedNumber}`;
     if (!confirm(`Retire ${label}? It will be hidden from the home screen.`)) return;
@@ -974,7 +990,7 @@ function renderWeather(data) {
 
     // Tie-in with the existing per-bed watering alert: only worth a mention if
     // rain is likely AND a bed is actually flagged as needing water.
-    const hintBed = todayRain >= 40 ? bedsData.find(b => wateringAlert(b) !== "") : null;
+    const hintBed = todayRain >= 40 ? bedsData.find(b => getWateringStatus(b).needsWater) : null;
     const hint = hintBed ? `
         <div class="weather-hint">
             <span>🌧️</span>

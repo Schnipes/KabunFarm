@@ -200,6 +200,27 @@
     assertTrue(wateringAlert(bed({ lastWatered: daysAgoStr(4) })).includes("Not watered in 4d"));
   });
 
+  test("getWateringStatus() returns plain data, not HTML — same decision wateringAlert() renders", () => {
+    localStorage.setItem("farmlog_logs_cache", "[]");
+    assertEqual(getWateringStatus(bed({ lastWatered: daysAgoStr(4) })), { needsWater: true, days: 4 });
+    assertEqual(getWateringStatus(bed({ lastWatered: daysAgoStr(1) })), { needsWater: false, days: 1 });
+    assertEqual(getWateringStatus(bed({ crops: [], lastWatered: null })), { needsWater: false, days: null });
+  });
+
+  // ---------------------------------------------------------------------
+  group("getBed() — single front door for bed lookup");
+
+  test("finds a bed by number, matching loosely (string vs number)", () => {
+    bedsData = [{ bedNumber: 5, crops: [] }, { bedNumber: 12, crops: [] }];
+    assertEqual(getBed(12).bedNumber, 12);
+    assertEqual(getBed("12").bedNumber, 12);
+  });
+
+  test("returns undefined for a bed number that doesn't exist", () => {
+    bedsData = [{ bedNumber: 5, crops: [] }];
+    assertEqual(getBed(999), undefined);
+  });
+
   // ---------------------------------------------------------------------
   group("computeCropPL() — profit, cost-per-kg, intercropped splitting");
 
