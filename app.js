@@ -634,7 +634,7 @@ function latestWholeFarmWatering() {
     const logs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
     let latest = "";
     logs.forEach(l => {
-        if (l.activityCategory === "watering" && String(l.bedNumber) === "all") {
+        if (l.activityCategory === "watering" && String(l.bedNumber) === "all" && l.status !== "deleted") {
             const d = ymd(l.date);
             if (d > latest) latest = d;
         }

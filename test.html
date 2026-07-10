@@ -1,0 +1,413 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kabun — Regression Tests</title>
+<style>
+  :root {
+    --bg: #ffffff; --surface: #f4f4f4; --border: #d8d8d8;
+    --text: #111111; --dim: #666666;
+    --green: #1a8f3c; --green-dark: #146b2d; --green-tint: #e9f6ee;
+    --red: #b3261e; --red-tint: #fdeceb;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px 16px 60px; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  .wrap { max-width: 640px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  .sub { font-size: 13px; color: var(--dim); margin: 0 0 20px; }
+  .summary {
+    display: flex; gap: 10px; align-items: center; padding: 12px 16px;
+    border-radius: 10px; font-weight: 700; font-size: 14px; margin-bottom: 20px;
+  }
+  .summary.pass { background: var(--green-tint); color: var(--green-dark); }
+  .summary.fail { background: var(--red-tint); color: var(--red); }
+  .group { margin-bottom: 22px; }
+  .group-title {
+    font-size: 11px; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+    color: var(--dim); margin: 0 0 8px 2px;
+  }
+  .case {
+    display: flex; align-items: flex-start; gap: 8px;
+    background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 12px; margin-bottom: 6px; font-size: 12.5px;
+  }
+  .case.fail { background: var(--red-tint); border-color: #f0c4c0; }
+  .case .mark { flex: 0 0 auto; font-weight: 800; }
+  .case.pass .mark { color: var(--green); }
+  .case.fail .mark { color: var(--red); }
+  .case .name { flex: 1; }
+  .case .detail { display: block; font-family: ui-monospace, "SF Mono", Consolas, monospace; font-size: 11px; color: var(--dim); margin-top: 3px; }
+
+  /* Stub elements app.js touches at load time / during DOMContentLoaded.
+     Hidden — this page isn't the real UI, just a harness. */
+  #stubs { display: none; }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <h1>Kabun — Regression Tests</h1>
+  <p class="sub">Zero-dependency pure-function tests. Open this file directly in a browser — no server, no build step.</p>
+  <div id="summary" class="summary">Running…</div>
+  <div id="results"></div>
+</div>
+
+<!-- Minimal DOM stubs so app.js can load without crashing (it wires a few
+     listeners at top level, outside DOMContentLoaded). Real network calls
+     are blocked below before app.js ever runs. -->
+<div id="stubs">
+  <div id="modalOverlay"></div>
+  <div id="bedDetailOverlay"></div>
+  <div id="saleModalOverlay"></div>
+  <div id="taskModalOverlay"></div>
+  <div class="status-badge"></div>
+  <select id="activityCategory"></select>
+  <select id="bedScope"></select>
+  <main></main>
+</div>
+
+<script>
+  // Never let app.js reach the real backend or prompt for a PIN while
+  // running tests — same discipline as manual browser-preview testing.
+  window.fetch = () => Promise.reject(new Error("test.html: network blocked"));
+  window.prompt = () => "test-pin";
+
+  // Isolate from whatever real farm data might be cached under this origin.
+  ["offline_farm_logs", "farmlog_beds_cache", "farmlog_formulas_cache",
+   "farmlog_logs_cache", "farmlog_sales_cache", "farmlog_tasks_cache",
+   "farmlog_last_bed", "farmlog_bed_max", "farmlog_auth_token",
+   "farmlog_category_colors", "farmlog_weather_cache"
+  ].forEach(k => localStorage.removeItem(k));
+</script>
+<script>document.write('<script src="app.js?cb=' + Date.now() + '"><\/script>');</script>
+<script>
+(function () {
+  const groups = [];
+  let current = null;
+
+  function group(name) {
+    current = { name, cases: [] };
+    groups.push(current);
+  }
+
+  function test(name, fn) {
+    try {
+      fn();
+      current.cases.push({ name, pass: true });
+    } catch (e) {
+      current.cases.push({ name, pass: false, detail: e.message });
+    }
+  }
+
+  function assertEqual(actual, expected, label) {
+    const a = JSON.stringify(actual), b = JSON.stringify(expected);
+    if (a !== b) throw new Error(`${label || "assertEqual"}: expected ${b}, got ${a}`);
+  }
+
+  function assertTrue(value, label) {
+    if (!value) throw new Error(`${label || "assertTrue"}: expected truthy, got ${JSON.stringify(value)}`);
+  }
+
+  // Serializes a local Date the way Apps Script actually returns a
+  // Date-typed Sheets cell once JSON-stringified — a full ISO UTC timestamp,
+  // not the plain "YYYY-MM-DD" the form itself writes.
+  function sheetsIsoFor(localDateStr) {
+    return new Date(localDateStr + "T00:00:00").toISOString();
+  }
+
+  function daysAgoStr(n) {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return localDateStr(d);
+  }
+
+  // ---------------------------------------------------------------------
+  group("ymd() — Sheets date normalization");
+
+  test("passes a plain YYYY-MM-DD string through unchanged", () => {
+    assertEqual(ymd("2026-07-10"), "2026-07-10");
+  });
+
+  test("empty/null/undefined all normalize to empty string", () => {
+    assertEqual(ymd(""), "");
+    assertEqual(ymd(null), "");
+    assertEqual(ymd(undefined), "");
+  });
+
+  test("recovers the correct LOCAL calendar date from a Date-typed cell's ISO string", () => {
+    // This is the exact bug that broke Tasks: a Date-typed Sheets cell
+    // serializes as a full-ISO UTC timestamp. In Kudat (UTC+8), local
+    // midnight today becomes "yesterday 16:00 UTC" — naive string
+    // comparison would silently mismatch every date-based lookup.
+    const today = todayString();
+    assertEqual(ymd(sheetsIsoFor(today)), today);
+  });
+
+  test("normalizes correctly across a month boundary", () => {
+    assertEqual(ymd(sheetsIsoFor("2026-08-01")), "2026-08-01");
+  });
+
+  // ---------------------------------------------------------------------
+  group("wateringAlert() / latestWholeFarmWatering() — whole-farm watering blend");
+
+  function bed(overrides) {
+    return Object.assign({ bedNumber: 1, crops: [{ cropName: "Eggplant", plantingDate: "2026-06-01" }], lastWatered: null }, overrides);
+  }
+
+  test("no crops → never alerts, regardless of watering history", () => {
+    localStorage.setItem("farmlog_logs_cache", "[]");
+    assertEqual(wateringAlert(bed({ crops: [], lastWatered: daysAgoStr(10) })), "");
+  });
+
+  test("never watered → alert with 'Not watered recently'", () => {
+    localStorage.setItem("farmlog_logs_cache", "[]");
+    assertTrue(wateringAlert(bed({ lastWatered: null })).includes("Not watered recently"));
+  });
+
+  test("watered 1 day ago → no alert", () => {
+    localStorage.setItem("farmlog_logs_cache", "[]");
+    assertEqual(wateringAlert(bed({ lastWatered: daysAgoStr(1) })), "");
+  });
+
+  test("watered 4 days ago, no whole-farm log → alert fires", () => {
+    localStorage.setItem("farmlog_logs_cache", "[]");
+    assertTrue(wateringAlert(bed({ lastWatered: daysAgoStr(4) })).includes("Not watered in 4d"));
+  });
+
+  test("watered 4 days ago per-bed, but whole-farm watering logged yesterday → alert suppressed", () => {
+    // Regression test for the audit's #1 finding: a "Whole Farm"-scoped
+    // watering log previously never counted toward any bed's alert at all.
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: daysAgoStr(1), bedNumber: "all", activityCategory: "watering", status: "active" }
+    ]));
+    assertEqual(wateringAlert(bed({ lastWatered: daysAgoStr(4) })), "");
+  });
+
+  test("whole-farm log older than the bed's own lastWatered → bed's own (more recent) date wins", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: daysAgoStr(9), bedNumber: "all", activityCategory: "watering", status: "active" }
+    ]));
+    assertEqual(wateringAlert(bed({ lastWatered: daysAgoStr(1) })), "");
+  });
+
+  test("deleted whole-farm log is ignored", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: daysAgoStr(1), bedNumber: "all", activityCategory: "watering", status: "deleted" }
+    ]));
+    assertTrue(wateringAlert(bed({ lastWatered: daysAgoStr(4) })).includes("Not watered in 4d"));
+  });
+
+  // ---------------------------------------------------------------------
+  group("computeCropPL() — profit, cost-per-kg, intercropped splitting");
+
+  test("intercropped log splits cost evenly across comma-joined crop names", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: "2026-07-01", cropName: "Eggplant, Okra", activityCategory: "watering", costRM: "10" }
+    ]));
+    localStorage.setItem("farmlog_sales_cache", "[]");
+    const stats = computeCropPL();
+    const eggplant = stats.find(s => s.cropName === "Eggplant");
+    const okra = stats.find(s => s.cropName === "Okra");
+    assertEqual(eggplant.cost, 5);
+    assertEqual(okra.cost, 5);
+  });
+
+  test("harvest weight also splits evenly across intercropped names", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: "2026-07-01", cropName: "Eggplant, Okra", activityCategory: "harvest", costRM: "0", weight: "10" }
+    ]));
+    localStorage.setItem("farmlog_sales_cache", "[]");
+    const stats = computeCropPL();
+    assertEqual(stats.find(s => s.cropName === "Eggplant").weightKg, 5);
+    assertEqual(stats.find(s => s.cropName === "Okra").weightKg, 5);
+  });
+
+  test("non-harvest logs never contribute weight, even if a weight value is present", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: "2026-07-01", cropName: "Eggplant", activityCategory: "watering", costRM: "0", weight: "999" }
+    ]));
+    localStorage.setItem("farmlog_sales_cache", "[]");
+    assertEqual(computeCropPL().find(s => s.cropName === "Eggplant").weightKg, 0);
+  });
+
+  test("costPerKg is null with zero harvested weight, computed correctly otherwise", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l1", date: "2026-07-01", cropName: "Eggplant", activityCategory: "harvest", costRM: "8", weight: "12.5" }
+    ]));
+    localStorage.setItem("farmlog_sales_cache", "[]");
+    const eggplant = computeCropPL().find(s => s.cropName === "Eggplant");
+    assertEqual(eggplant.costPerKg, 8 / 12.5);
+
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { id: "l2", date: "2026-07-01", cropName: "Okra", activityCategory: "watering", costRM: "4" }
+    ]));
+    assertEqual(computeCropPL().find(s => s.cropName === "Okra").costPerKg, null);
+  });
+
+  test("sales revenue attaches by trimmed crop name", () => {
+    localStorage.setItem("farmlog_logs_cache", "[]");
+    localStorage.setItem("farmlog_sales_cache", JSON.stringify([
+      { id: "s1", crop: "  Eggplant  ", totalRevenue: "50" }
+    ]));
+    assertEqual(computeCropPL().find(s => s.cropName === "Eggplant").revenue, 50);
+  });
+
+  // ---------------------------------------------------------------------
+  group("Date grouping — dateGroupLabel() / planDayLabel()");
+
+  test("today's date groups as 'Today'", () => {
+    assertTrue(dateGroupLabel(todayString()).startsWith("Today"));
+  });
+
+  test("yesterday groups as 'Yesterday'", () => {
+    assertTrue(dateGroupLabel(daysAgoStr(1)).startsWith("Yesterday"));
+  });
+
+  test("older dates show only the short date, no relative label", () => {
+    const label = dateGroupLabel(daysAgoStr(5));
+    assertTrue(!label.startsWith("Today") && !label.startsWith("Yesterday"));
+  });
+
+  test("planDayLabel shows 'Today' for today but a weekday name for other dates", () => {
+    assertTrue(planDayLabel(todayString()).startsWith("Today"));
+    const future = new Date(); future.setDate(future.getDate() + 3);
+    const label = planDayLabel(localDateStr(future));
+    assertTrue(!label.startsWith("Today") && !label.startsWith("Yesterday"));
+  });
+
+  // ---------------------------------------------------------------------
+  group("parseRecipe() / renderIngredients() — dosage calculator");
+
+  test("parses a multi-ingredient recipe string", () => {
+    assertEqual(parseRecipe("Neem oil:5:ml|Soap:2:g"), [
+      { name: "Neem oil", amount: 5, unit: "ml" },
+      { name: "Soap", amount: 2, unit: "g" }
+    ]);
+  });
+
+  test("recipe without colons (free-text notes) returns null, not a crash", () => {
+    assertEqual(parseRecipe("just spray it generously"), null);
+    assertEqual(parseRecipe(""), null);
+    assertEqual(parseRecipe(null), null);
+  });
+
+  test("ml doses scale by tank volume and round to whole ml", () => {
+    // 5 ml/L in a 16 L sprayer → 80 ml. This is the math the farmer
+    // actually mixes chemicals by — a scaling bug here is a safety bug.
+    const html = renderIngredients([{ name: "Neem oil", amount: 5, unit: "ml" }], 16);
+    assertTrue(html.includes(">80 ml<"), "expected 80 ml in: " + html);
+  });
+
+  test("g doses scale with one decimal, trailing .0 trimmed", () => {
+    const html = renderIngredients([{ name: "Soap", amount: 2.5, unit: "g" }], 16);
+    assertTrue(html.includes(">40 g<"), "expected 40 g in: " + html);
+    const html2 = renderIngredients([{ name: "Soap", amount: 0.53, unit: "g" }], 16);
+    assertTrue(html2.includes(">8.5 g<"), "expected 8.5 g in: " + html2);
+  });
+
+  test("invalid/zero volume falls back to the 16 L default", () => {
+    const html = renderIngredients([{ name: "Neem oil", amount: 5, unit: "ml" }], "");
+    assertTrue(html.includes(">80 ml<"), "expected 16L fallback in: " + html);
+  });
+
+  // ---------------------------------------------------------------------
+  group("normalizeCropName() — crop identity (feeds P&L grouping)");
+
+  test("snaps case-insensitively onto an existing crop name", () => {
+    bedsData = [{ bedNumber: 1, crops: [{ cropName: "Kangkong", plantingDate: "2026-06-01" }], cropHistory: [] }];
+    localStorage.setItem("farmlog_sales_cache", "[]");
+    assertEqual(normalizeCropName("kangkong"), "Kangkong");
+    assertEqual(normalizeCropName("KANGKONG"), "Kangkong");
+  });
+
+  test("trims whitespace and snaps", () => {
+    bedsData = [{ bedNumber: 1, crops: [{ cropName: "Kangkong", plantingDate: "2026-06-01" }], cropHistory: [] }];
+    assertEqual(normalizeCropName("  kangkong  "), "Kangkong");
+  });
+
+  test("unknown crop name passes through unchanged (trimmed)", () => {
+    bedsData = [];
+    localStorage.setItem("farmlog_sales_cache", "[]");
+    assertEqual(normalizeCropName(" Bitter Gourd "), "Bitter Gourd");
+  });
+
+  test("also matches names known only from crop history and sales", () => {
+    bedsData = [{ bedNumber: 1, crops: [], cropHistory: [{ cropName: "Okra" }] }];
+    localStorage.setItem("farmlog_sales_cache", JSON.stringify([{ id: "s1", crop: "Cili Padi" }]));
+    assertEqual(normalizeCropName("okra"), "Okra");
+    assertEqual(normalizeCropName("cili padi"), "Cili Padi");
+  });
+
+  // ---------------------------------------------------------------------
+  group("escapeHtml() — XSS guard");
+
+  test("escapes angle brackets, ampersand, and both quote styles", () => {
+    assertEqual(escapeHtml(`<img src=x onerror="alert('hi')">&`),
+      "&lt;img src=x onerror=&quot;alert(&#39;hi&#39;)&quot;&gt;&amp;");
+  });
+
+  test("non-string input is stringified, not crashed on", () => {
+    assertEqual(escapeHtml(42), "42");
+    assertEqual(escapeHtml(null), "null");
+  });
+
+  // ---------------------------------------------------------------------
+  group("csvEscape() — CSV export field quoting");
+
+  test("plain value passes through unquoted", () => {
+    assertEqual(csvEscape("Eggplant"), "Eggplant");
+  });
+
+  test("value containing a comma gets quoted", () => {
+    assertEqual(csvEscape("Eggplant, Okra"), '"Eggplant, Okra"');
+  });
+
+  test("embedded quotes are doubled and the whole value quoted", () => {
+    assertEqual(csvEscape('12" pot'), '"12"" pot"');
+  });
+
+  test("null/undefined become an empty string, not the literal word", () => {
+    assertEqual(csvEscape(null), "");
+    assertEqual(csvEscape(undefined), "");
+  });
+
+  // ---------------------------------------------------------------------
+  // Render results
+  let total = 0, failed = 0;
+  const resultsEl = document.getElementById("results");
+  groups.forEach(g => {
+    const box = document.createElement("div");
+    box.className = "group";
+    const title = document.createElement("p");
+    title.className = "group-title";
+    title.textContent = g.name;
+    box.appendChild(title);
+    g.cases.forEach(c => {
+      total++;
+      if (!c.pass) failed++;
+      const row = document.createElement("div");
+      row.className = "case " + (c.pass ? "pass" : "fail");
+      row.innerHTML = `<span class="mark">${c.pass ? "✓" : "✕"}</span>` +
+        `<span class="name">${c.name}${c.pass ? "" : `<span class="detail">${c.detail}</span>`}</span>`;
+      box.appendChild(row);
+    });
+    resultsEl.appendChild(box);
+  });
+
+  const summary = document.getElementById("summary");
+  summary.className = "summary " + (failed === 0 ? "pass" : "fail");
+  summary.textContent = failed === 0
+    ? `All ${total} tests passed`
+    : `${failed} of ${total} tests failed`;
+
+  // Isolation cleanup — leave localStorage as we found it.
+  ["offline_farm_logs", "farmlog_beds_cache", "farmlog_formulas_cache",
+   "farmlog_logs_cache", "farmlog_sales_cache", "farmlog_tasks_cache"
+  ].forEach(k => localStorage.removeItem(k));
+})();
+</script>
+</body>
+</html>
