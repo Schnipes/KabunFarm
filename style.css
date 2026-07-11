@@ -704,6 +704,13 @@ textarea {
   font-size: 12px; color: #3d6a85; line-height: 1.4;
 }
 
+.weather-stale-note {
+  display: block;
+  margin-top: 8px;
+  font-size: 11px;
+  color: #888;
+}
+
 /* ---------- Pull-to-refresh ---------- */
 #ptrIndicator {
   overflow: hidden;

@@ -133,6 +133,7 @@
       <section aria-label="Activity log">
         <div class="section-header">
           <p class="section-label">Activity</p>
+          <button class="add-bed-btn" id="clearFiltersBtn" onclick="clearActivityFilters()" hidden>✕ Clear filters</button>
           <button class="add-bed-btn" onclick="exportActivityCsv()">⬇ Export CSV</button>
         </div>
 
@@ -270,6 +271,14 @@
             Inputs used
             <span class="hint" id="inputsHint">e.g. Master Mix, LAB serum, BSF compost</span>
           </label>
+          <div class="formula-volume-global" id="logSprayerVolRow" hidden>
+            <span class="formula-calc-label">Sprayer volume</span>
+            <div class="formula-volume-wrap">
+              <input type="number" id="logSprayerVol" value="16" min="1" max="100" step="1"
+                     oninput="document.getElementById('globalSprayerVol').value = this.value;">
+              <span class="formula-volume-unit">L</span>
+            </div>
+          </div>
           <button type="button" class="formula-pick-btn" onclick="toggleFormulaPicker()">🧪 Pick from formulas</button>
           <div id="formulaPickerList" class="formula-picker-list" hidden></div>
           <textarea id="inputsUsed" placeholder="List inputs used for this activity" aria-describedby="inputsHint"></textarea>
@@ -466,6 +475,19 @@
       <div id="plotDetailContent"></div>
       <button class="add-bed-btn" style="width:100%;margin-top:12px;" onclick="openPlotAssignModal(currentPlotId)">✏️ Edit beds in this plot</button>
       <button class="bed-delete-btn" onclick="deletePlot()">Delete this plot</button>
+    </div>
+  </div>
+
+  <!-- Sync Queue Modal -->
+  <div class="modal-overlay" id="queueModalOverlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <h2>Pending sync</h2>
+        <button class="modal-close" onclick="closeQueueModal()" aria-label="Close">✕</button>
+      </div>
+      <div id="queueModalList"></div>
+      <button class="add-bed-btn" style="width:100%;margin-top:12px;" onclick="retryQueueFromModal()">↻ Retry sync</button>
+      <button class="bed-delete-btn" onclick="clearQueueFromModal()">Clear pending queue</button>
     </div>
   </div>
 

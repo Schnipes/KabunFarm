@@ -306,6 +306,14 @@ function updateBedFields() {
     document.getElementById("newCropField").hidden       = true;
     document.getElementById("newCropName").required      = false;
 
+    // Sprayer volume only matters for spray-based activities — mirror the
+    // global input here so it can be adjusted without leaving the log form.
+    const sprayVolRow = document.getElementById("logSprayerVolRow");
+    sprayVolRow.hidden = !(activity === "pest_control" || activity === "watering");
+    if (!sprayVolRow.hidden) {
+        document.getElementById("logSprayerVol").value = document.getElementById("globalSprayerVol").value;
+    }
+
     // Update bed context bar
     const contextBar = document.getElementById("bedContextBar");
     if (isSpecific) {
@@ -418,23 +426,81 @@ function updateSyncBadge() {
 
 // Escape hatch for a queue item that's stuck (e.g. a stale action a server
 // rejected silently, or a PIN that no longer matches) — tap the sync badge
-// to retry once, or clear it entirely if retrying doesn't help.
+// to see what's queued, then retry or clear it.
 function handleSyncBadgeClick() {
     const queueLength = getOfflineLogs().length;
     if (queueLength === 0) {
         showToast("Already synced");
         return;
     }
-    if (confirm(`${queueLength} pending action(s) haven't synced yet.\n\nRetry sync now? (Cancel for other options)`)) {
-        processOfflineQueue();
-        return;
-    }
-    if (confirm(`Clear all ${queueLength} pending action(s) without syncing? This cannot be undone — any unsynced changes will be lost.`)) {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-        updateSyncBadge();
-        showToast("Pending queue cleared");
+    openQueueModal();
+}
+
+function describeQueueItem(item) {
+    switch (item.action) {
+        case "addLog": {
+            const cat = (item.activityCategory || "").replace("_", " ");
+            const bed = item.bedNumber === "all" ? "Whole Farm"
+                : String(item.bedNumber).startsWith("plot_") ? "a plot"
+                : "Bed " + item.bedNumber;
+            return `Log ${cat || "activity"} — ${bed}`;
+        }
+        case "addBatch":     return `Sow ${item.cropName || ""} — Bed ${item.bedNumber}`;
+        case "updateBatch":  return `Update batch — Bed ${item.bedNumber}`;
+        case "addSale":      return `Sale — ${item.quantity} ${item.unit} ${item.crop || ""}`.trim();
+        case "deleteSale":   return "Delete a sale";
+        case "deleteLog":    return "Delete a log";
+        case "addBed":       return "Add a bed";
+        case "updateBed":    return `Rename Bed ${item.bedNumber}`;
+        case "deleteBed":    return `Delete Bed ${item.bedNumber}`;
+        case "addFormula":   return `Add formula — ${item.name || ""}`;
+        case "updateFormula":return `Update formula — ${item.name || ""}`;
+        case "deleteFormula":return "Delete a formula";
+        case "addTask":      return `Add task — ${item.date || ""}`;
+        case "updateTaskStatus": return `Mark task ${item.status || ""}`;
+        case "deleteTask":   return "Delete a task";
+        case "addPlot":      return `Add plot — ${item.name || ""}`;
+        case "renamePlot":   return `Rename plot — ${item.name || ""}`;
+        case "deletePlot":   return "Delete a plot";
+        case "assignBedsToPlot": return `Assign beds to plot (${(item.bedNumbers || []).length})`;
+        case "setBedPlot":   return `Assign Bed ${item.bedNumber} to plot`;
+        case "removeBedFromPlot": return `Remove Bed ${item.bedNumber} from plot`;
+        default:              return item.action || "Unknown action";
     }
 }
+
+function openQueueModal() {
+    const queue = getOfflineLogs();
+    const list = document.getElementById("queueModalList");
+    list.innerHTML = queue.length
+        ? queue.map(item => `<div class="bed-detail-row"><span class="bed-detail-name">${escapeHtml(describeQueueItem(item))}</span></div>`).join("")
+        : '<p style="color:#888;padding:12px 0;">Nothing pending.</p>';
+    document.getElementById("queueModalOverlay").classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+function closeQueueModal() {
+    document.getElementById("queueModalOverlay").classList.remove("open");
+    document.body.style.overflow = "";
+}
+
+function retryQueueFromModal() {
+    closeQueueModal();
+    processOfflineQueue();
+}
+
+function clearQueueFromModal() {
+    const queueLength = getOfflineLogs().length;
+    if (!confirm(`Clear all ${queueLength} pending action(s) without syncing? This cannot be undone — any unsynced changes will be lost.`)) return;
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
+    updateSyncBadge();
+    closeQueueModal();
+    showToast("Pending queue cleared");
+}
+
+document.getElementById("queueModalOverlay").addEventListener("click", function (e) {
+    if (e.target === this) closeQueueModal();
+});
 
 function handleSubmit(event) {
     event.preventDefault();
@@ -943,11 +1009,21 @@ function openBedDetail(bedNum) {
     document.body.style.overflow = "hidden";
 }
 
+// Set when a bed detail sheet is opened from within a plot's detail sheet,
+// so closing the bed can step back into the plot instead of exiting to Home.
+let bedDetailReturnPlotId = null;
+
 function closeBedDetail() {
     document.getElementById("bedDetailOverlay").classList.remove("open");
     document.getElementById("bedRenameRow").hidden = true;
     document.getElementById("bedPlotRow").hidden = true;
     document.body.style.overflow = "";
+
+    if (bedDetailReturnPlotId) {
+        const returnPlotId = bedDetailReturnPlotId;
+        bedDetailReturnPlotId = null;
+        openPlotDetail(returnPlotId);
+    }
 }
 
 function toggleBedRename() {
@@ -1022,6 +1098,7 @@ function deleteBed() {
     saveBeds();
     renderBeds(bedsData);
     populateBedDropdown();
+    bedDetailReturnPlotId = null; // bed is gone — nothing to return to
     closeBedDetail();
 
     queueAction({ action: "deleteBed", bedNumber: selectedBedForLog });
@@ -1030,6 +1107,7 @@ function deleteBed() {
 }
 
 function logForBed(type) {
+    bedDetailReturnPlotId = null; // logging opens another modal, not a "back" action
     closeBedDetail();
     openModal(type);
     document.getElementById("bedScope").value = selectedBedForLog;
@@ -1138,6 +1216,21 @@ function renderWeather(data) {
     if (!container || !data.current || !data.daily) return;
     lastWeatherData = data;
 
+    // Only worth a note when we're showing data older than the normal 1-hour
+    // refresh window (e.g. a background refresh failed) — a fresh render
+    // shouldn't nag with a timestamp.
+    let staleNote = "";
+    try {
+        const cached = JSON.parse(localStorage.getItem(WEATHER_CACHE_KEY) || "null");
+        if (cached && cached.fetchedAt) {
+            const ageMs = Date.now() - cached.fetchedAt;
+            if (ageMs >= 60 * 60 * 1000) {
+                const ageHrs = Math.max(1, Math.round(ageMs / (60 * 60 * 1000)));
+                staleNote = `<span class="weather-stale-note">Offline — showing forecast from ${ageHrs}h ago</span>`;
+            }
+        }
+    } catch (e) { /* ignore corrupt cache */ }
+
     const temp        = Math.round(data.current.temperature_2m);
     const icon         = weatherIcon(data.current.weather_code);
     const todayRain    = data.daily.precipitation_probability_max[0];
@@ -1197,7 +1290,8 @@ function renderWeather(data) {
             <span>${recText}</span>
         </div>
         <div class="weather-forecast-strip">${dayStrip}</div>
-        ${hint}`;
+        ${hint}
+        ${staleNote}`;
 }
 
 // --- 10. Formulas Tab ---
@@ -1372,7 +1466,22 @@ function filterByType(type) {
     renderCombinedActivity();
 }
 
+function clearActivityFilters() {
+    activeLogFilter = "all";
+    activeTypeFilter = "all";
+    renderBedFilterChips();
+    renderTypeFilterChips();
+    renderCombinedActivity();
+}
+
+function updateClearFiltersBtn() {
+    const btn = document.getElementById("clearFiltersBtn");
+    if (!btn) return;
+    btn.hidden = activeLogFilter === "all" && activeTypeFilter === "all";
+}
+
 function renderCombinedActivity() {
+    updateClearFiltersBtn();
     const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
     const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
     // Normalise sales into the same shape as logs for rendering
@@ -2350,7 +2459,7 @@ function openPlotDetail(plotId) {
     const members = bedsInPlot(plotId);
     const content = document.getElementById("plotDetailContent");
     content.innerHTML = members.length ? members.map(b => `
-        <div class="bed-detail-row" style="cursor:pointer;" onclick="closePlotDetail(); openBedDetail(${b.bedNumber});">
+        <div class="bed-detail-row" style="cursor:pointer;" onclick="bedDetailReturnPlotId='${escapeHtml(String(plotId))}'; closePlotDetail(); openBedDetail(${b.bedNumber});">
             <div class="bed-detail-info">
                 <p class="bed-detail-name">Bed ${escapeHtml(String(b.bedNumber))}${b.name ? " · " + escapeHtml(b.name) : ""}</p>
                 <p class="bed-detail-meta">${b.crops.length} crop${b.crops.length === 1 ? "" : "s"}</p>
