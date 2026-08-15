@@ -229,8 +229,11 @@ async function checkPin() {
         alert("Incorrect PIN. Please refresh and try again.");
         return false;
     } catch (e) {
-        // Firestore unreachable (first offline use) — accept any PIN input
-        // and verify properly once back online. Same trust level as before.
+        if (e.code === "permission-denied" || (e.message && e.message.includes("permission"))) {
+            alert("⚠️ Firestore Security Rules blocked access. Please check your Rules in Firebase Console.");
+            return false;
+        }
+        // Network unreachable (offline use) — accept PIN input for offline use.
         console.warn("Could not verify PIN online — accepting for offline use:", e);
         localStorage.setItem(AUTH_TOKEN_KEY, pin);
         return true;
@@ -1079,6 +1082,15 @@ async function fetchBeds() {
         refreshCropDatalists();
     } catch (e) {
         console.error("Could not load beds:", e);
+        const container = document.getElementById("batchList");
+        if (!cached && container) {
+            container.innerHTML = `
+            <div class="empty-beds-card" onclick="addBed()">
+                <span class="empty-beds-icon">🌱</span>
+                <p class="empty-beds-title">Add your first bed</p>
+                <p class="empty-beds-hint">${e.code === 'permission-denied' ? '⚠️ Permission denied: check Firestore Rules' : 'Tap to create Bed 1'}</p>
+            </div>`;
+        }
     } finally {
         if (lastWeatherData) renderWeather(lastWeatherData);
     }
