@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farmlog-cache-firebase-v1';
+const CACHE_NAME = 'farmlog-cache-22d04b2';
 
 const urlsToCache = [
   './',
