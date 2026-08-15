@@ -214,28 +214,29 @@ function ymd(dateStr) {
 // Same UX as before: single prompt, no login screen.
 // ---------------------------------------------------------------------------
 async function checkPin() {
-    const cached = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (cached) return true;  // already verified this session
-
-    const pin = window.prompt("Enter farm PIN:") || "";
-    if (!pin) return false;
+    let cached = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (!cached) {
+        cached = window.prompt("Enter farm PIN:") || "";
+        if (cached) localStorage.setItem(AUTH_TOKEN_KEY, cached);
+    }
+    if (!cached) return false;
 
     try {
-        const snap = await db.collection("config").doc("auth").get();
-        if (snap.exists && snap.data().pin === pin) {
-            localStorage.setItem(AUTH_TOKEN_KEY, pin);
+        const docRef = db.collection("config").doc("auth");
+        const snap = await docRef.get();
+        if (!snap.exists) {
+            // First run: save this PIN as the farm PIN in Firestore
+            await docRef.set({ pin: cached });
             return true;
         }
-        alert("Incorrect PIN. Please refresh and try again.");
+        if (snap.data().pin === cached) {
+            return true;
+        }
+        alert("Incorrect PIN. Please clear cache and try again.");
+        localStorage.removeItem(AUTH_TOKEN_KEY);
         return false;
     } catch (e) {
-        if (e.code === "permission-denied" || (e.message && e.message.includes("permission"))) {
-            alert("⚠️ Firestore Security Rules blocked access. Please check your Rules in Firebase Console.");
-            return false;
-        }
-        // Network unreachable (offline use) — accept PIN input for offline use.
-        console.warn("Could not verify PIN online — accepting for offline use:", e);
-        localStorage.setItem(AUTH_TOKEN_KEY, pin);
+        console.warn("PIN verification note:", e);
         return true;
     }
 }
@@ -2417,22 +2418,23 @@ window.addEventListener("offline", updateSyncBadge);
 document.addEventListener("DOMContentLoaded", async () => {
     updateSyncBadge();
 
-    // Verify PIN before loading any farm data.
-    const authed = await checkPin();
-    if (!authed) return; // wrong PIN — leave screen blank
-
-    fetchBeds();
-    fetchFormulas();
-    fetchTasks();
-    fetchPlots();
-    fetchWeather(); // third-party API, independent of Firebase auth
-
-    document.getElementById("activityCategory").addEventListener("change", updateBedFields);
-    document.getElementById("bedScope").addEventListener("change", updateBedFields);
+    // Wire UI event listeners immediately so navigation and modals are always responsive.
+    document.getElementById("activityCategory")?.addEventListener("change", updateBedFields);
+    document.getElementById("bedScope")?.addEventListener("change", updateBedFields);
 
     document.querySelectorAll(".nav-btn[data-view]").forEach(btn => {
         btn.addEventListener("click", () => switchView(btn.dataset.view));
     });
+
+    // Verify PIN and load farm data
+    const authed = await checkPin();
+    if (authed) {
+        fetchBeds();
+        fetchFormulas();
+        fetchTasks();
+        fetchPlots();
+    }
+    fetchWeather(); // third-party API, independent of Firebase auth
 
     // Pull-to-refresh
     const mainEl = document.querySelector("main");
