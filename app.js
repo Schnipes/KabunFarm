@@ -2477,7 +2477,10 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     if ("serviceWorker" in navigator) {
         navigator.serviceWorker.register("./sw.js")
-            .then(reg => console.log("SW registered:", reg.scope))
+            .then(reg => {
+                console.log("SW registered:", reg.scope);
+                reg.update();
+            })
             .catch(err => console.error("SW registration failed:", err));
         navigator.serviceWorker.addEventListener("controllerchange", () => {
             document.getElementById("updateBanner").hidden = false;
