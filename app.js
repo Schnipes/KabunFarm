@@ -26,19 +26,22 @@ const firebaseConfig = {
     appId: "1:9924250387:web:81e137d46973a9d489e8e6"
 };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
-
-// Enable offline persistence (writes buffer locally when no signal, auto-sync
-// when back online — replaces the old manual localStorage queue entirely).
-db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-    if (err.code === 'failed-precondition') {
-        // Multiple tabs open — persistence works in the first tab only.
-        console.warn('Firestore persistence unavailable: multiple tabs open.');
-    } else if (err.code === 'unimplemented') {
-        console.warn('Firestore persistence not supported in this browser.');
+let db = null;
+try {
+    if (typeof firebase !== "undefined") {
+        if (!firebase.apps || !firebase.apps.length) {
+            firebase.initializeApp(firebaseConfig);
+        }
+        db = firebase.firestore();
+        db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+            console.warn('Firestore persistence note:', err.code);
+        });
+    } else {
+        console.error("Firebase SDK not loaded on window.");
     }
-});
+} catch (e) {
+    console.error("Firebase initialization failed:", e);
+}
 
 
 // Kudat, Sabah — hardcoded since this is a single-farm app.
