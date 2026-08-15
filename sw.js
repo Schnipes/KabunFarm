@@ -1,11 +1,13 @@
-const CACHE_NAME = 'farmlog-cache-d3cfc10';
+const CACHE_NAME = 'farmlog-cache-firebase-v1';
 
 const urlsToCache = [
   './',
   './index.html',
   './style.css',
   './app.js',
-  './manifest.json'
+  './manifest.json',
+  'https://www.gstatic.com/firebasejs/10.15.0/firebase-app-compat.js',
+  'https://www.gstatic.com/firebasejs/10.15.0/firebase-firestore-compat.js'
 ];
 
 self.addEventListener('install', event => {

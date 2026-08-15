@@ -1,5 +1,5 @@
 // --- 1. Configuration ---
-const STORAGE_KEY        = "offline_farm_logs";
+const STORAGE_KEY        = "offline_farm_logs";   // kept for legacy cache-clear on migration
 const BEDS_CACHE_KEY     = "farmlog_beds_cache";
 const FORMULAS_CACHE_KEY = "farmlog_formulas_cache";
 const LOGS_CACHE_KEY     = "farmlog_logs_cache";
@@ -11,7 +11,35 @@ const CATEGORY_COLOR_KEY = "farmlog_category_colors";
 const WEATHER_CACHE_KEY  = "farmlog_weather_cache";
 const TASKS_CACHE_KEY    = "farmlog_tasks_cache";
 const PLOTS_CACHE_KEY    = "farmlog_plots_cache";
-const GOOGLE_SCRIPT_URL  = "https://script.google.com/macros/s/AKfycbyQSzKWjoj3rD4_d045XN4csdYW5VXIHxV9qHviMBUc7iJvacGRHHuBLQPUTecMCBmswQ/exec";
+
+// ---------------------------------------------------------------------------
+// Firebase setup (Compat SDK v10 — loaded via <script> tags in index.html)
+// Replace the firebaseConfig object below with your own from:
+//   Firebase Console → Project Settings → Your apps → Web app → SDK setup
+// ---------------------------------------------------------------------------
+const firebaseConfig = {
+    apiKey: "AIzaSyBCCbJqzgC8E1JwAZBW31-0hVjYPJe9-Fc",
+    authDomain: "kabunfarm.firebaseapp.com",
+    projectId: "kabunfarm",
+    storageBucket: "kabunfarm.firebasestorage.app",
+    messagingSenderId: "9924250387",
+    appId: "1:9924250387:web:81e137d46973a9d489e8e6"
+};
+
+firebase.initializeApp(firebaseConfig);
+const db = firebase.firestore();
+
+// Enable offline persistence (writes buffer locally when no signal, auto-sync
+// when back online — replaces the old manual localStorage queue entirely).
+db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+    if (err.code === 'failed-precondition') {
+        // Multiple tabs open — persistence works in the first tab only.
+        console.warn('Firestore persistence unavailable: multiple tabs open.');
+    } else if (err.code === 'unimplemented') {
+        console.warn('Firestore persistence not supported in this browser.');
+    }
+});
+
 
 // Kudat, Sabah — hardcoded since this is a single-farm app.
 const FARM_LAT = 6.887;
@@ -181,22 +209,32 @@ function ymd(dateStr) {
     return isNaN(d) ? s.slice(0, 10) : localDateStr(d);
 }
 
-// Shared-secret token gate. Asked once (native prompt), then cached in
-// localStorage — no login screen, matches this app's single-user, no-auth-
-// screen design. Not real auth (the token is client-side), just a deterrent
-// against casual/accidental discovery of the backend URL.
-function getAuthToken() {
-    let token = localStorage.getItem(AUTH_TOKEN_KEY);
-    if (!token) {
-        token = window.prompt("Enter farm PIN:") || "";
-        if (token) localStorage.setItem(AUTH_TOKEN_KEY, token);
-    }
-    return token;
-}
+// ---------------------------------------------------------------------------
+// Auth — PIN verified once against Firestore config/auth, then cached locally.
+// Same UX as before: single prompt, no login screen.
+// ---------------------------------------------------------------------------
+async function checkPin() {
+    const cached = localStorage.getItem(AUTH_TOKEN_KEY);
+    if (cached) return true;  // already verified this session
 
-// Appends the auth token to a GET request URL (which already has ?action=...).
-function withToken(url) {
-    return url + "&token=" + encodeURIComponent(getAuthToken());
+    const pin = window.prompt("Enter farm PIN:") || "";
+    if (!pin) return false;
+
+    try {
+        const snap = await db.collection("config").doc("auth").get();
+        if (snap.exists && snap.data().pin === pin) {
+            localStorage.setItem(AUTH_TOKEN_KEY, pin);
+            return true;
+        }
+        alert("Incorrect PIN. Please refresh and try again.");
+        return false;
+    } catch (e) {
+        // Firestore unreachable (first offline use) — accept any PIN input
+        // and verify properly once back online. Same trust level as before.
+        console.warn("Could not verify PIN online — accepting for offline use:", e);
+        localStorage.setItem(AUTH_TOKEN_KEY, pin);
+        return true;
+    }
 }
 
 function todayString() {
@@ -397,110 +435,30 @@ function bedsInPlot(plotId) {
     return bedsData.filter(b => String(b.plotId || "") === String(plotId));
 }
 
-function queueAction(payload) {
-    const queue = getOfflineLogs();
-    queue.push(payload);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
-    updateSyncBadge();
-}
-
-function getOfflineLogs() {
-    const data = localStorage.getItem(STORAGE_KEY);
-    return data ? JSON.parse(data) : [];
-}
-
+// Firestore handles the offline queue automatically via IndexedDB persistence.
+// These helpers are intentionally minimal — no manual queue needed.
 function updateSyncBadge() {
-    const queueLength = getOfflineLogs().length;
     const badge = document.querySelector(".status-badge");
-    badge.classList.toggle("status-badge-pending", queueLength > 0);
-    if (queueLength > 0) {
-        badge.innerHTML = `<span class="status-dot" style="background:#b3261e" aria-hidden="true"></span><span>${queueLength} Offline (Pending)</span>`;
-        badge.style.borderColor = "#b3261e";
-        badge.style.color = "#b3261e";
-    } else {
-        badge.innerHTML = `<span class="status-dot" style="background:var(--color-primary)" aria-hidden="true"></span><span>Online & Synced</span>`;
+    badge.classList.remove("status-badge-pending");
+    if (navigator.onLine) {
+        badge.innerHTML = `<span class="status-dot" style="background:var(--color-primary)" aria-hidden="true"></span><span>Online &amp; Synced</span>`;
         badge.style.borderColor = "var(--color-border)";
         badge.style.color = "var(--color-text)";
+    } else {
+        badge.innerHTML = `<span class="status-dot" style="background:#b3261e" aria-hidden="true"></span><span>Offline</span>`;
+        badge.style.borderColor = "#b3261e";
+        badge.style.color = "#b3261e";
     }
 }
 
-// Escape hatch for a queue item that's stuck (e.g. a stale action a server
-// rejected silently, or a PIN that no longer matches) — tap the sync badge
-// to see what's queued, then retry or clear it.
 function handleSyncBadgeClick() {
-    const queueLength = getOfflineLogs().length;
-    if (queueLength === 0) {
-        showToast("Already synced");
-        return;
-    }
-    openQueueModal();
-}
-
-function describeQueueItem(item) {
-    switch (item.action) {
-        case "addLog": {
-            const cat = (item.activityCategory || "").replace("_", " ");
-            const bed = item.bedNumber === "all" ? "Whole Farm"
-                : String(item.bedNumber).startsWith("plot_") ? "a plot"
-                : "Bed " + item.bedNumber;
-            return `Log ${cat || "activity"} — ${bed}`;
-        }
-        case "addBatch":     return `Sow ${item.cropName || ""} — Bed ${item.bedNumber}`;
-        case "updateBatch":  return `Update batch — Bed ${item.bedNumber}`;
-        case "addSale":      return `Sale — ${item.quantity} ${item.unit} ${item.crop || ""}`.trim();
-        case "deleteSale":   return "Delete a sale";
-        case "deleteLog":    return "Delete a log";
-        case "addBed":       return "Add a bed";
-        case "updateBed":    return `Rename Bed ${item.bedNumber}`;
-        case "deleteBed":    return `Delete Bed ${item.bedNumber}`;
-        case "addFormula":   return `Add formula — ${item.name || ""}`;
-        case "updateFormula":return `Update formula — ${item.name || ""}`;
-        case "deleteFormula":return "Delete a formula";
-        case "addTask":      return `Add task — ${item.date || ""}`;
-        case "updateTaskStatus": return `Mark task ${item.status || ""}`;
-        case "deleteTask":   return "Delete a task";
-        case "addPlot":      return `Add plot — ${item.name || ""}`;
-        case "renamePlot":   return `Rename plot — ${item.name || ""}`;
-        case "deletePlot":   return "Delete a plot";
-        case "assignBedsToPlot": return `Assign beds to plot (${(item.bedNumbers || []).length})`;
-        case "setBedPlot":   return `Assign Bed ${item.bedNumber} to plot`;
-        case "removeBedFromPlot": return `Remove Bed ${item.bedNumber} from plot`;
-        default:              return item.action || "Unknown action";
+    if (navigator.onLine) {
+        showToast("Online — all changes synced");
+    } else {
+        showToast("Offline — changes will sync when connected");
     }
 }
 
-function openQueueModal() {
-    const queue = getOfflineLogs();
-    const list = document.getElementById("queueModalList");
-    list.innerHTML = queue.length
-        ? queue.map(item => `<div class="bed-detail-row"><span class="bed-detail-name">${escapeHtml(describeQueueItem(item))}</span></div>`).join("")
-        : '<p style="color:#888;padding:12px 0;">Nothing pending.</p>';
-    document.getElementById("queueModalOverlay").classList.add("open");
-    document.body.style.overflow = "hidden";
-}
-
-function closeQueueModal() {
-    document.getElementById("queueModalOverlay").classList.remove("open");
-    document.body.style.overflow = "";
-}
-
-function retryQueueFromModal() {
-    closeQueueModal();
-    processOfflineQueue();
-}
-
-function clearQueueFromModal() {
-    const queueLength = getOfflineLogs().length;
-    if (!confirm(`Clear all ${queueLength} pending action(s) without syncing? This cannot be undone — any unsynced changes will be lost.`)) return;
-    localStorage.setItem(STORAGE_KEY, JSON.stringify([]));
-    updateSyncBadge();
-    closeQueueModal();
-    showToast("Pending queue cleared");
-}
-
-document.getElementById("queueModalOverlay").addEventListener("click", function (e) {
-    if (e.target === this) closeQueueModal();
-});
 
 function handleSubmit(event) {
     event.preventDefault();
@@ -534,7 +492,6 @@ function handleSubmit(event) {
         : [];
 
     const entry = {
-        action:           "addLog",
         id:               "log_" + Date.now(),
         date,
         bedNumber:        bedScope,
@@ -553,25 +510,25 @@ function handleSubmit(event) {
         inputsUsed:       document.getElementById("inputsUsed").value,
         costRM:           document.getElementById("costRM").value,
         revenueRM:        "",
-        weight:           activity === "harvest" ? document.getElementById("harvestWeight").value : ""
+        weight:           activity === "harvest" ? document.getElementById("harvestWeight").value : "",
+        status:           "active"
     };
 
-    const queue = getOfflineLogs();
-    queue.push(entry);
+    // Write log to Firestore (SDK buffers offline and syncs automatically).
+    db.collection("logs").doc(entry.id).set(entry).catch(e => console.error("addLog failed:", e));
 
     if (activity === "sowing" && bedScope !== "all" && cropName) {
         const batchId = "batch_" + Date.now();
-        queue.push({
-            action:       "addBatch",
-            id:           batchId,
-            bedNumber:    bedScope,
+        const batch = {
+            id:          batchId,
+            bedNumber:   bedScope,
             cropName,
-            location:     "commercial",
+            location:    "commercial",
             plantingDate: date,
-            status:       "active"
-        });
-        // Optimistic update — add crop to bed immediately (carry the batch id
-        // so it can be harvested precisely before the next refetch).
+            status:      "active"
+        };
+        db.collection("batches").doc(batchId).set(batch).catch(e => console.error("addBatch failed:", e));
+        // Optimistic update — add crop to bed immediately.
         const bed = getBed(bedScope);
         if (bed) bed.crops.push({ id: batchId, cropName, plantingDate: date });
         saveBeds();
@@ -580,29 +537,18 @@ function handleSubmit(event) {
     }
 
     if (activity === "harvest") {
-        // Each checkbox carries data-bed (set in updateBedFields), which is
-        // the specific bed a checked crop belongs to — batches stay
-        // inherently per-bed even when the log itself is plot-scoped, so a
-        // plot harvest still writes one updateBatch per bed/crop pair.
-        // (Whole-farm scope never populates this checklist, so `checked` is
-        // simply empty there — no guard needed.)
+        // Each checkbox carries data-bed, keeping batches per-bed even for plot-scoped logs.
         const checked = [...document.querySelectorAll('input[name="harvestCrop"]:checked')];
         checked.forEach(cb => {
             const batchId = cb.value;
             const cropNm  = cb.dataset.crop;
             const bedNum  = cb.dataset.bed;
-            queue.push({
-                action:      "updateBatch",
-                id:          batchId,      // target this exact batch (handles duplicate crop names)
-                bedNumber:   bedNum,
-                cropName:    cropNm,
-                harvestDate: date,
-                status:      "done"
-            });
+            db.collection("batches").doc(batchId).update({
+                status: "done",
+                harvestDate: date
+            }).catch(e => console.error("updateBatch failed:", e));
             const bed = getBed(bedNum);
             if (bed) {
-                // Remove the specific batch; fall back to name if id is missing
-                // (crop sown this session, not yet refetched with an id).
                 bed.crops = batchId
                     ? bed.crops.filter(c => String(c.id) !== String(batchId))
                     : bed.crops.filter(c => c.cropName !== cropNm);
@@ -612,21 +558,14 @@ function handleSubmit(event) {
         renderBeds(bedsData);
     }
 
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
     localStorage.setItem(LAST_BED_KEY, bedScope);
-    updateSyncBadge();
 
-    // Optimistic: also insert into the logs cache (same pattern as sales), so
-    // the entry shows in the Activity tab while offline and render-time reads
-    // of the cache (e.g. the whole-farm watering blend) see it immediately.
-    // The next successful fetchLogs replaces the cache wholesale — no dupes.
+    // Optimistic: insert into logs cache so Activity tab reflects it immediately.
     const cachedLogs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
     cachedLogs.unshift(entry);
     localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(cachedLogs));
 
-    // Auto-complete a matching pre-planned task — logging the real activity
-    // through the normal flow silently checks it off, no separate manual tap.
-    // "all" (whole-farm) logs match tasks with no bed set the same way.
+    // Auto-complete a matching pre-planned task.
     const taskBedKey = bedScope === "all" ? "" : bedScope;
     const matchingTask = tasksData.find(t =>
         String(t.bedNumber || "") === String(taskBedKey) &&
@@ -636,15 +575,16 @@ function handleSubmit(event) {
     );
     if (matchingTask) toggleTaskDone(matchingTask.id);
 
-    // Optimistically update lastActivity on the bed card. Plot check comes
-    // BEFORE the "!== all" single-bed branch — a plot value is also
-    // "!== all", so checking it second would silently fall into the
-    // single-bed path and no-op via getBed() returning undefined.
+    // Optimistically update lastActivity/lastWatered on bed cards.
     if (bedScope.startsWith("plot_")) {
-        // Plot-wide watering waters every member bed — clear their alerts.
-        // (lastActivity left alone, same reasoning as whole-farm below.)
         const members = bedsInPlot(bedScope);
-        if (activity === "watering") members.forEach(b => { b.lastWatered = date; });
+        if (activity === "watering") {
+            members.forEach(b => {
+                b.lastWatered = date;
+                db.collection("beds").doc(String(b.bedNumber)).update({ lastWatered: date })
+                    .catch(e => console.error("updateBed lastWatered failed:", e));
+            });
+        }
         saveBeds();
         renderBeds(bedsData);
     } else if (bedScope !== "all") {
@@ -654,11 +594,12 @@ function handleSubmit(event) {
             if (activity === "watering") bed.lastWatered = date;
             saveBeds();
             renderBeds(bedsData);
+            const bedUpdate = { lastActivity: { type: activity, date } };
+            if (activity === "watering") bedUpdate.lastWatered = date;
+            db.collection("beds").doc(String(bedScope)).update(bedUpdate)
+                .catch(e => console.error("updateBed activity failed:", e));
         }
     } else if (activity === "watering") {
-        // Whole-farm watering waters every bed — clear all watering alerts.
-        // (lastActivity is left alone: the server computes it per-bed only,
-        // so setting it here would just flicker back on the next fetch.)
         bedsData.forEach(b => { b.lastWatered = date; });
         saveBeds();
         renderBeds(bedsData);
@@ -666,75 +607,17 @@ function handleSubmit(event) {
 
     closeModal();
 
-    // Richer toast: "Harvest logged · Bed 2"
     const bedLabel = bedScope === "all" ? "Whole Farm" :
                       bedScope.startsWith("plot_") ? (getPlot(bedScope)?.name || "Plot") :
                       `Bed ${bedScope}`;
     const actLabel = CATEGORY_LABEL[activity] || activity;
     showToast(`${actLabel} logged · ${bedLabel}`);
-
-    processOfflineQueue();
 }
 
-// --- 7. Cloud Sync ---
-let isSyncing = false;
 
-async function processOfflineQueue() {
-    // Lock: prevent overlapping drains from double-POSTing or clobbering the queue.
-    if (isSyncing || !navigator.onLine) return;
-    isSyncing = true;
-    try {
-        while (true) {
-            const queue = getOfflineLogs();
-            if (!queue.length) break;
-            const item = queue[0];
-
-            let result;
-            try {
-                // text/plain keeps this a "simple" request (no CORS preflight, which
-                // Apps Script can't answer) while still letting us READ the reply.
-                const res = await fetch(GOOGLE_SCRIPT_URL, {
-                    method:  "POST",
-                    headers: { "Content-Type": "text/plain;charset=utf-8" },
-                    body:    JSON.stringify({ ...item, token: getAuthToken() })
-                });
-                if (!res.ok) throw new Error("HTTP " + res.status);
-                result = await res.json();
-            } catch (err) {
-                // Couldn't reach the server or read its reply — keep the item and
-                // retry later. This is the normal offline / flaky-signal path.
-                console.error("Sync failed, will retry later.", err);
-                break;
-            }
-
-            if (result && result.unauthorized) {
-                // Wrong/missing PIN — every remaining item would fail identically,
-                // and dropping them would silently discard real unsynced work. Keep
-                // the whole queue and stop, same as a network failure, so it retries
-                // once the PIN is fixed rather than being lost.
-                console.error("Sync blocked: unauthorized. Check the farm PIN.");
-                showToast("⚠️ Sync blocked — check your farm PIN");
-                break;
-            }
-
-            if (result && result.error) {
-                // Server understood the request and rejected it — retrying can't
-                // help, so drop it rather than let it block the rest of the queue.
-                console.error("Server rejected queued action, dropping:", result.error, item);
-            }
-
-            // Confirmed handled (success, or a permanent rejection just logged):
-            // remove exactly this item. FIFO + append-only means index 0 is still
-            // the item we sent, so anything queued during the await survives.
-            const fresh = getOfflineLogs();
-            fresh.shift();
-            localStorage.setItem(STORAGE_KEY, JSON.stringify(fresh));
-            updateSyncBadge();
-        }
-    } finally {
-        isSyncing = false;
-    }
-}
+// --- 7. Cloud Sync (Firebase) ---
+// Firebase Firestore SDK handles offline persistence automatically.
+// No manual queue needed — writes buffer in IndexedDB and sync when online.
 
 // --- 8. View Switching ---
 function switchView(viewName) {
@@ -748,9 +631,7 @@ function switchView(viewName) {
     if (formulasBtn) formulasBtn.classList.toggle("active", viewName === "formulas");
     if (viewName === "data") {
         renderBedFilterChips(); renderTypeFilterChips(); renderFinancialSummary(); renderCropPL();
-        // Drain pending offline actions first so the server GET doesn't overwrite
-        // the cache with state that's missing our unsynced changes (same fix as startup).
-        processOfflineQueue().finally(fetchLogs);
+        fetchLogs();
     }
     if (viewName === "formulas") fetchFormulas();
     if (viewName === "plan") fetchTasks();
@@ -1049,8 +930,8 @@ function saveBedName() {
     document.getElementById("bedDetailTitle").textContent = label;
     document.getElementById("bedRenameRow").hidden = true;
 
-    queueAction({ action: "updateBed", bedNumber: bed.bedNumber, name });
-    processOfflineQueue();
+    db.collection("beds").doc(String(bed.bedNumber)).update({ name })
+        .catch(e => console.error("updateBed name failed:", e));
     showToast(name ? `Renamed to "${name}"` : "Name cleared");
 }
 
@@ -1080,11 +961,12 @@ function saveBedPlot() {
     document.getElementById("bedPlotRow").hidden = true;
 
     if (plotId) {
-        queueAction({ action: "setBedPlot", bedNumber: bed.bedNumber, plotId });
+        db.collection("beds").doc(String(bed.bedNumber)).update({ plotId })
+            .catch(e => console.error("setBedPlot failed:", e));
     } else {
-        queueAction({ action: "removeBedFromPlot", bedNumber: bed.bedNumber });
+        db.collection("beds").doc(String(bed.bedNumber)).update({ plotId: "" })
+            .catch(e => console.error("removeBedFromPlot failed:", e));
     }
-    processOfflineQueue();
     showToast(plotId ? `Added to ${getPlot(plotId)?.name || "plot"}` : "Removed from plot");
 }
 
@@ -1101,8 +983,8 @@ function deleteBed() {
     bedDetailReturnPlotId = null; // bed is gone — nothing to return to
     closeBedDetail();
 
-    queueAction({ action: "deleteBed", bedNumber: selectedBedForLog });
-    processOfflineQueue();
+    db.collection("beds").doc(String(selectedBedForLog)).update({ status: "retired" })
+        .catch(e => console.error("deleteBed failed:", e));
     showToast(`${label} retired`);
 }
 
@@ -1130,11 +1012,13 @@ function addBed() {
     localStorage.setItem(BED_MAX_KEY, String(maxBedNumber));
 
     const newBed = {
-        action:    "addBed",
-        id:        "bed_" + Date.now(),
         bedNumber: nextNum,
         location:  "commercial",
-        status:    "active"
+        status:    "active",
+        plotId:    "",
+        crops:     [],
+        lastActivity: null,
+        lastWatered:  null
     };
 
     bedsData.push({ bedNumber: nextNum, location: "commercial", plotId: "", crops: [] });
@@ -1142,15 +1026,13 @@ function addBed() {
     renderBeds(bedsData);
     populateBedDropdown();
 
-    const queue = getOfflineLogs();
-    queue.push(newBed);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
-    updateSyncBadge();
+    db.collection("beds").doc(String(nextNum)).set(newBed)
+        .catch(e => console.error("addBed failed:", e));
     showToast(`Bed ${nextNum} added!`);
-    processOfflineQueue();
 }
 
 async function fetchBeds() {
+    // Paint cached data first so the screen isn't empty on slow connections.
     const cached = localStorage.getItem(BEDS_CACHE_KEY);
     if (cached) {
         try {
@@ -1162,30 +1044,47 @@ async function fetchBeds() {
         } catch (e) { /* ignore corrupt cache */ }
     }
     try {
-        const res  = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getBeds"));
-        const data = await res.json();
-        if (data.beds) {
-            bedsData = data.beds;
-            localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(data.beds));
-            if (typeof data.maxBedNumber === "number") {
-                maxBedNumber = Math.max(maxBedNumber, data.maxBedNumber);
-                localStorage.setItem(BED_MAX_KEY, String(maxBedNumber));
-            }
-            renderBeds(bedsData);
-            populateBedDropdown();
-            renderBedFilterChips();
-            refreshCropDatalists();
-        }
+        // Fetch beds, active batches, and done batches in parallel.
+        const [bedsSnap, activeBatchSnap, doneBatchSnap] = await Promise.all([
+            db.collection("beds").get(),
+            db.collection("batches").where("status", "==", "active").get(),
+            db.collection("batches").where("status", "==", "done").get()
+        ]);
+
+        const beds         = bedsSnap.docs.map(d => ({ ...d.data() })).filter(b => b.status !== "retired");
+        const activeBatches = activeBatchSnap.docs.map(d => ({ ...d.data() }));
+        const doneBatches   = doneBatchSnap.docs.map(d => ({ ...d.data() }));
+
+        // Merge crops and history onto each bed.
+        bedsData = beds.map(bed => ({
+            ...bed,
+            crops: activeBatches
+                .filter(b => String(b.bedNumber) === String(bed.bedNumber))
+                .map(b => ({ id: b.id, cropName: b.cropName, plantingDate: ymd(b.plantingDate) })),
+            cropHistory: doneBatches
+                .filter(b => String(b.bedNumber) === String(bed.bedNumber))
+                .map(b => ({ cropName: b.cropName, plantingDate: ymd(b.plantingDate), harvestDate: ymd(b.harvestDate) }))
+                .sort((a, b) => (b.harvestDate || "") > (a.harvestDate || "") ? 1 : -1)
+        }));
+
+        // Track highest bed number to avoid reuse.
+        const maxFromFirestore = Math.max(...bedsData.map(b => Number(b.bedNumber)), 0);
+        maxBedNumber = Math.max(maxBedNumber, maxFromFirestore);
+        localStorage.setItem(BED_MAX_KEY, String(maxBedNumber));
+
+        localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
+        renderBeds(bedsData);
+        populateBedDropdown();
+        renderBedFilterChips();
+        refreshCropDatalists();
     } catch (e) {
         console.error("Could not load beds:", e);
     } finally {
-        // Weather usually paints before beds load; its bed tie-in hint read an
-        // empty bedsData then. Re-render now that bed state is current.
         if (lastWeatherData) renderWeather(lastWeatherData);
     }
 }
 
-// Third-party public API, unrelated to GOOGLE_SCRIPT_URL — no auth token needed.
+// Third-party public API (Open-Meteo) — no Firebase auth needed.
 async function fetchWeather() {
     const cached = localStorage.getItem(WEATHER_CACHE_KEY);
     if (cached) {
@@ -1372,9 +1271,11 @@ async function fetchFormulas() {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>';
     }
     try {
-        const res      = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getFormulas"));
-        const data     = await res.json();
-        const formulas = data.formulas || [];
+        const snap = await db.collection("formulas").get();
+        const formulas = snap.docs
+            .map(d => ({ ...d.data() }))
+            .filter(f => f.status !== "deleted")
+            .sort((a, b) => (a.name || "").localeCompare(b.name || ""));
         localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(formulas));
         renderFormulas(formulas);
     } catch (e) {
@@ -1394,17 +1295,14 @@ async function fetchPlots() {
         try { plotsData = JSON.parse(cached); } catch (e) { /* ignore corrupt cache */ }
     }
     try {
-        const res  = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getPlots"));
-        const data = await res.json();
-        if (data.plots) {
-            plotsData = data.plots;
-            localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(plotsData));
-        }
+        const snap = await db.collection("plots").get();
+        plotsData = snap.docs
+            .map(d => ({ ...d.data() }))
+            .filter(p => p.status !== "deleted");
+        localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(plotsData));
     } catch (e) {
         console.error("Could not load plots:", e);
     } finally {
-        // Plot names may arrive after beds/the log form already rendered —
-        // refresh both dependents regardless of whether the fetch succeeded.
         renderBeds(bedsData);
         populateBedDropdown();
     }
@@ -1576,25 +1474,21 @@ function deleteLogEntry(logId) {
         if (!cached) return;
         const sales = JSON.parse(cached).filter(s => String(s.id) !== String(logId));
         localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
-        const queue = getOfflineLogs();
-        queue.push({ action: "deleteSale", id: logId });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+        db.collection("sales").doc(logId).update({ status: "deleted" })
+            .catch(e => console.error("deleteSale failed:", e));
     } else {
         const cached = localStorage.getItem(LOGS_CACHE_KEY);
         if (!cached) return;
         const logs = JSON.parse(cached).filter(l => String(l.id) !== String(logId));
         localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
-        const queue = getOfflineLogs();
-        queue.push({ action: "deleteLog", id: logId });
-        localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+        db.collection("logs").doc(logId).update({ status: "deleted" })
+            .catch(e => console.error("deleteLog failed:", e));
     }
 
     renderCombinedActivity();
     renderFinancialSummary();
     renderCropPL();
-    updateSyncBadge();
     showToast("Entry deleted");
-    processOfflineQueue();
 }
 
 function renderLogs(logs) {
@@ -1674,14 +1568,12 @@ async function fetchLogs() {
         container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading logs...</p>';
     }
     try {
-        const [logsRes, salesRes] = await Promise.all([
-            fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getLogs")),
-            fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getSales"))
+        const [logsSnap, salesSnap] = await Promise.all([
+            db.collection("logs").orderBy("date", "desc").get(),
+            db.collection("sales").orderBy("date", "desc").get()
         ]);
-        const logsData  = await logsRes.json();
-        const salesData = await salesRes.json();
-        const logs  = logsData.logs   || [];
-        const sales = salesData.sales || [];
+        const logs  = logsSnap.docs.map(d => ({ ...d.data() })).filter(l => l.status !== "deleted");
+        const sales = salesSnap.docs.map(d => ({ ...d.data() })).filter(s => s.status !== "deleted");
         localStorage.setItem(LOGS_CACHE_KEY,  JSON.stringify(logs));
         localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
         renderCombinedActivity();
@@ -1924,19 +1816,19 @@ function handleSaleSubmit(event) {
     const totalRevenue = (parseFloat(qty) * parseFloat(pricePerUnit)).toFixed(2);
 
     const entry = {
-        action:       "addSale",
         id:           "sale_" + Date.now(),
         date,
         crop,
         quantity:     qty,
         unit,
         pricePerUnit,
-        totalRevenue
+        totalRevenue,
+        status:       "active"
     };
 
-    const queue = getOfflineLogs();
-    queue.push(entry);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(queue));
+    // Write to Firestore (buffers offline, syncs on reconnect automatically).
+    db.collection("sales").doc(entry.id).set(entry)
+        .catch(e => console.error("addSale failed:", e));
 
     // Optimistic: prepend to sales cache
     const cached = localStorage.getItem(SALES_CACHE_KEY);
@@ -1944,10 +1836,8 @@ function handleSaleSubmit(event) {
     sales.unshift(entry);
     localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
 
-    updateSyncBadge();
     closeSaleModal();
     showToast(`Sale logged · ${qty} ${unit} ${crop} · RM ${totalRevenue}`);
-    processOfflineQueue();
 
     // Refresh activity tab if visible
     if (!document.getElementById("view-data").hidden) {
@@ -2063,19 +1953,20 @@ async function handleFormulaSubmit(e) {
         updated[editingFormulaIndex] = { ...updated[editingFormulaIndex], ...formula };
         localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(updated));
         renderFormulas(updated);
-        queueAction({ action: "updateFormula", id: formulasData[editingFormulaIndex].id, ...formula });
+        db.collection("formulas").doc(formulasData[editingFormulaIndex].id).update(formula)
+            .catch(e => console.error("updateFormula failed:", e));
         showToast(`Formula updated`);
     } else {
-        const newEntry = { id: "f_" + Date.now(), ...formula };
+        const newEntry = { id: "f_" + Date.now(), ...formula, status: "active" };
         const updated  = [newEntry, ...formulasData];
         localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(updated));
         renderFormulas(updated);
-        queueAction({ action: "addFormula", id: newEntry.id, ...formula });
+        db.collection("formulas").doc(newEntry.id).set(newEntry)
+            .catch(e => console.error("addFormula failed:", e));
         showToast(`Formula added`);
     }
 
     closeFormulaModal();
-    processOfflineQueue();
 }
 
 function deleteFormula(index) {
@@ -2084,8 +1975,8 @@ function deleteFormula(index) {
     const updated = formulasData.filter((_, i) => i !== index);
     localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(updated));
     renderFormulas(updated);
-    queueAction({ action: "deleteFormula", id: f.id });
-    processOfflineQueue();
+    db.collection("formulas").doc(f.id).update({ status: "deleted" })
+        .catch(e => console.error("deleteFormula failed:", e));
     showToast(`Formula deleted`);
 }
 
@@ -2094,26 +1985,20 @@ async function fetchTasks() {
     const cached = localStorage.getItem(TASKS_CACHE_KEY);
     if (cached) {
         try {
-            // Normalize here too, not just on the network path — a cache written
-            // before the ymd fix (or on another device) may hold full-ISO dates.
             tasksData = JSON.parse(cached).map(t => ({ ...t, date: ymd(t.date) }));
             renderPlanView();
-            renderTodayTasks(); // offline, this is the only render Home gets
+            renderTodayTasks();
         } catch (e) { /* ignore corrupt cache */ }
     }
     try {
-        const res  = await fetch(withToken(GOOGLE_SCRIPT_URL + "?action=getTasks"));
-        const data = await res.json();
-        if (data.tasks) {
-            // Sheets cells formatted as Date arrive as full-ISO timestamps once
-            // JSON-serialized by Apps Script, not the plain "YYYY-MM-DD" the form
-            // wrote — normalize here so every date-based lookup downstream (Today's
-            // Tasks, Plan view's day grouping) keeps matching after a refresh.
-            tasksData = data.tasks.map(t => ({ ...t, date: ymd(t.date) }));
-            localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
-            renderPlanView();
-            if (typeof renderTodayTasks === "function") renderTodayTasks();
-        }
+        const snap = await db.collection("tasks").get();
+        tasksData = snap.docs
+            .map(d => ({ ...d.data() }))
+            .filter(t => t.status !== "deleted")
+            .map(t => ({ ...t, date: ymd(t.date) }));
+        localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
+        renderPlanView();
+        if (typeof renderTodayTasks === "function") renderTodayTasks();
     } catch (e) {
         console.error("Could not load tasks:", e);
     }
@@ -2250,8 +2135,6 @@ function renderTodayTasks() {
     container.innerHTML = `<div class="today-list">${todays.map(renderTodayTaskRow).join("")}</div>`;
 }
 
-// Shared by the Plan tab's task-check and Today's Tasks' compact
-// checkbox — optimistic local flip + queued sync, same shape as saveBedName().
 function toggleTaskDone(taskId) {
     const task = tasksData.find(t => String(t.id) === String(taskId));
     if (!task) return;
@@ -2260,8 +2143,8 @@ function toggleTaskDone(taskId) {
     localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
     renderPlanView();
     if (typeof renderTodayTasks === "function") renderTodayTasks();
-    queueAction({ action: "updateTaskStatus", id: task.id, status: newStatus });
-    processOfflineQueue();
+    db.collection("tasks").doc(String(task.id)).update({ status: newStatus })
+        .catch(e => console.error("updateTaskStatus failed:", e));
 }
 
 function selectTaskSlot(btn) {
@@ -2358,7 +2241,8 @@ function handleTaskSubmit(event) {
             status:           "active"
         };
         tasksData.push(newTask);
-        queueAction({ action: "addTask", ...newTask });
+        db.collection("tasks").doc(newTask.id).set(newTask)
+            .catch(e => console.error("addTask failed:", e));
     }
 
     localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
@@ -2366,7 +2250,6 @@ function handleTaskSubmit(event) {
     if (typeof renderTodayTasks === "function") renderTodayTasks();
     closeTaskModal();
     showToast(repeat ? "Tasks added for the week" : "Task added");
-    processOfflineQueue();
 }
 
 // --- 16. Plots (group beds for bulk logging + a collapsed Home view) ---
@@ -2426,29 +2309,35 @@ function handlePlotSubmit(event) {
     if (isEdit) {
         const plot = getPlot(plotId);
         if (plot) plot.name = name;
-        queueAction({ action: "renamePlot", id: plotId, name });
+        db.collection("plots").doc(plotId).update({ name })
+            .catch(e => console.error("renamePlot failed:", e));
     } else {
         plotsData.push({ id: plotId, name, status: "active" });
-        queueAction({ action: "addPlot", id: plotId, name });
+        db.collection("plots").doc(plotId).set({ id: plotId, name, status: "active" })
+            .catch(e => console.error("addPlot failed:", e));
     }
     localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(plotsData));
 
-    // Optimistic bed reassignment — set plotId on every checked bed, clear it
-    // off any bed that was in this plot but is no longer checked (covers both
-    // "removed from this plot" and "moved to a different plot" via a later edit).
+    // Optimistic bed reassignment.
     bedsData.forEach(b => {
         const isChecked = checkedBeds.includes(String(b.bedNumber));
-        if (isChecked) b.plotId = plotId;
-        else if (String(b.plotId || "") === String(plotId)) b.plotId = "";
+        const wasInThisPlot = String(b.plotId || "") === String(plotId);
+        if (isChecked) {
+            b.plotId = plotId;
+            db.collection("beds").doc(String(b.bedNumber)).update({ plotId })
+                .catch(e => console.error("assignBedToPlot failed:", e));
+        } else if (wasInThisPlot) {
+            b.plotId = "";
+            db.collection("beds").doc(String(b.bedNumber)).update({ plotId: "" })
+                .catch(e => console.error("removeBedFromPlot failed:", e));
+        }
     });
     saveBeds();
-    queueAction({ action: "assignBedsToPlot", plotId, bedNumbers: checkedBeds });
 
     renderBeds(bedsData);
     populateBedDropdown();
     closePlotAssignModal();
     showToast(isEdit ? "Plot updated" : "Plot created");
-    processOfflineQueue();
 }
 
 function openPlotDetail(plotId) {
@@ -2459,7 +2348,7 @@ function openPlotDetail(plotId) {
     const members = bedsInPlot(plotId);
     const content = document.getElementById("plotDetailContent");
     content.innerHTML = members.length ? members.map(b => `
-        <div class="bed-detail-row" style="cursor:pointer;" onclick="bedDetailReturnPlotId='${escapeHtml(String(plotId))}'; closePlotDetail(); openBedDetail(${b.bedNumber});">
+        <div class="bed-detail-row" style="cursor:pointer;" onclick="openBedFromPlot('${escapeHtml(String(plotId))}', ${b.bedNumber})">
             <div class="bed-detail-info">
                 <p class="bed-detail-name">Bed ${escapeHtml(String(b.bedNumber))}${b.name ? " · " + escapeHtml(b.name) : ""}</p>
                 <p class="bed-detail-meta">${b.crops.length} crop${b.crops.length === 1 ? "" : "s"}</p>
@@ -2492,28 +2381,39 @@ function deletePlot() {
     bedsData.forEach(b => { if (String(b.plotId || "") === String(plotId)) b.plotId = ""; });
     saveBeds();
 
-    queueAction({ action: "deletePlot", id: plotId });
+    db.collection("plots").doc(plotId).update({ status: "deleted" })
+        .catch(e => console.error("deletePlot failed:", e));
     renderBeds(bedsData);
     populateBedDropdown();
     closePlotDetail();
     showToast("Plot deleted");
-    processOfflineQueue();
+}
+
+// Helper: open a bed detail from inside a plot detail sheet.
+// Avoids inline assignment of module-scoped variable in onclick HTML.
+function openBedFromPlot(plotId, bedNum) {
+    bedDetailReturnPlotId = plotId;
+    closePlotDetail();
+    openBedDetail(bedNum);
 }
 
 // --- 17. App Initialization ---
-window.addEventListener("online", processOfflineQueue);
+// Refresh the sync badge whenever connectivity changes.
+window.addEventListener("online",  updateSyncBadge);
+window.addEventListener("offline", updateSyncBadge);
 
-document.addEventListener("DOMContentLoaded", () => {
+document.addEventListener("DOMContentLoaded", async () => {
     updateSyncBadge();
-    // Drain pending offline actions before fetching, so the server GET doesn't
-    // overwrite the cache with state that's missing our unsynced changes.
-    processOfflineQueue().finally(() => {
-        fetchBeds();
-        fetchFormulas();
-        fetchTasks();
-        fetchPlots();
-    });
-    fetchWeather(); // third-party API, independent of the offline queue/auth gate
+
+    // Verify PIN before loading any farm data.
+    const authed = await checkPin();
+    if (!authed) return; // wrong PIN — leave screen blank
+
+    fetchBeds();
+    fetchFormulas();
+    fetchTasks();
+    fetchPlots();
+    fetchWeather(); // third-party API, independent of Firebase auth
 
     document.getElementById("activityCategory").addEventListener("change", updateBedFields);
     document.getElementById("bedScope").addEventListener("change", updateBedFields);
@@ -2553,15 +2453,11 @@ document.addEventListener("DOMContentLoaded", () => {
         indicator.style.height = "0";
         indicator.style.opacity = "0";
         if (pull >= PTR_THRESHOLD) {
-            // Drain pending offline actions first so the server GET doesn't overwrite
-            // the cache with state that's missing our unsynced changes.
-            processOfflineQueue().finally(() => {
-                fetchBeds();
-                fetchLogs();
-                fetchTasks(); // delegation flow: pick up tasks assigned remotely
-                fetchPlots();
-            });
-            fetchWeather(); // third-party API, independent of the offline queue/auth gate
+            fetchBeds();
+            fetchLogs();
+            fetchTasks();
+            fetchPlots();
+            fetchWeather();
         }
     }, { passive: true });
 

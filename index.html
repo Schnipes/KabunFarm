@@ -478,18 +478,7 @@
     </div>
   </div>
 
-  <!-- Sync Queue Modal -->
-  <div class="modal-overlay" id="queueModalOverlay">
-    <div class="modal-sheet">
-      <div class="modal-header">
-        <h2>Pending sync</h2>
-        <button class="modal-close" onclick="closeQueueModal()" aria-label="Close">✕</button>
-      </div>
-      <div id="queueModalList"></div>
-      <button class="add-bed-btn" style="width:100%;margin-top:12px;" onclick="retryQueueFromModal()">↻ Retry sync</button>
-      <button class="bed-delete-btn" onclick="clearQueueFromModal()">Clear pending queue</button>
-    </div>
-  </div>
+  <!-- Sync queue modal removed — Firebase handles offline sync automatically -->
 
   <!-- Formula Edit/Add Modal -->
   <div class="modal-overlay" id="formulaModalOverlay">
@@ -526,6 +515,10 @@
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <!-- Firebase Compat SDK (v10) — loads as regular scripts, no ES module changes needed -->
+  <script src="https://www.gstatic.com/firebasejs/10.15.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.15.0/firebase-firestore-compat.js"></script>
 
 <script src="app.js"></script>
 </body>

@@ -2,3 +2,6 @@
 .DS_Store
 Thumbs.db
 
+# Firebase credentials & dependencies
+*serviceAccountKey*.json
+node_modules/
