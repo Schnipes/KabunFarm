@@ -405,6 +405,79 @@
     assertTrue(html.includes(">80 ml<"), "expected 16L fallback in: " + html);
   });
 
+  test("all 8 standard agricultural formulas parse accurately", () => {
+    DEFAULT_FORMULAS.forEach(f => {
+      const parsed = parseRecipe(f.recipe);
+      assertTrue(Array.isArray(parsed) && parsed.length > 0, `Failed to parse formula: ${f.name}`);
+      parsed.forEach(ing => {
+        assertTrue(typeof ing.name === "string" && ing.name.length > 0, `Invalid ingredient name in ${f.name}`);
+        assertTrue(typeof ing.amount === "number" && !isNaN(ing.amount) && ing.amount > 0, `Invalid amount in ${f.name}`);
+        assertTrue(["ml", "g", "L", "tsp"].includes(ing.unit), `Invalid unit in ${f.name}: ${ing.unit}`);
+      });
+    });
+  });
+
+  test("standard formulas calculate correct dosages for 16L and 20L sprayer tanks", () => {
+    // 1. Bio-Botanical Pest Shield (Bio Botava 2.5 ml/L, Garlic Oil 2 ml/L)
+    const f1 = parseRecipe("Bio Botava:2.5:ml|Garlic Oil Extract:2:ml");
+    const f1_16 = renderIngredients(f1, 16);
+    assertTrue(f1_16.includes(">40 ml<") && f1_16.includes(">32 ml<"));
+    const f1_20 = renderIngredients(f1, 20);
+    assertTrue(f1_20.includes(">50 ml<") && f1_20.includes(">40 ml<"));
+
+    // 2. Pest Guard Contact Spray (Pest Guard 3 ml/L, Garlic Oil 1.5 ml/L)
+    const f2 = parseRecipe("Pest Guard 2:3:ml|Garlic Oil Extract:1.5:ml");
+    const f2_16 = renderIngredients(f2, 16);
+    assertTrue(f2_16.includes(">48 ml<") && f2_16.includes(">24 ml<"));
+    const f2_20 = renderIngredients(f2, 20);
+    assertTrue(f2_20.includes(">60 ml<") && f2_20.includes(">30 ml<"));
+
+    // 3. Foliar Growth & Stress Mix (Amino 18 2 ml/L)
+    const f3 = parseRecipe("Amino 18:2:ml");
+    assertTrue(renderIngredients(f3, 16).includes(">32 ml<"));
+    assertTrue(renderIngredients(f3, 20).includes(">40 ml<"));
+
+    // 4. Calcium-Boron Bloom & Fruit Set (Wira CalBo 2 ml/L)
+    const f4 = parseRecipe("Wira CalBo:2:ml");
+    assertTrue(renderIngredients(f4, 16).includes(">32 ml<"));
+    assertTrue(renderIngredients(f4, 20).includes(">40 ml<"));
+
+    // 5. Combined Foliar Nutrition Boost (Amino 18 1.5 ml/L, Wira CalBo 1.5 ml/L)
+    const f5 = parseRecipe("Amino 18:1.5:ml|Wira CalBo:1.5:ml");
+    assertTrue(renderIngredients(f5, 16).includes(">24 ml<"));
+    assertTrue(renderIngredients(f5, 20).includes(">30 ml<"));
+
+    // 6. Antracol Protective Spray (Antracol 2 g/L)
+    const f6 = parseRecipe("Antracol:2:g");
+    assertTrue(renderIngredients(f6, 16).includes(">32 g<"));
+    assertTrue(renderIngredients(f6, 20).includes(">40 g<"));
+
+    // 7. Abamectin Mite & Thrip Knockdown (Abamectin 1 ml/L)
+    const f7 = parseRecipe("Abamectin:1:ml");
+    assertTrue(renderIngredients(f7, 16).includes(">16 ml<"));
+    assertTrue(renderIngredients(f7, 20).includes(">20 ml<"));
+
+    // 8. Cypermethrin Broad-Spectrum Knockdown (Cypermethrin 1.5 ml/L)
+    const f8 = parseRecipe("Cypermethrin:1.5:ml");
+    assertTrue(renderIngredients(f8, 16).includes(">24 ml<"));
+    assertTrue(renderIngredients(f8, 20).includes(">30 ml<"));
+  });
+
+  test("fractional dosage scaling maintains precision without rounding artifacts", () => {
+    const f = parseRecipe("Cypermethrin:1.5:ml|Bio Botava:2.5:ml");
+    const html5L = renderIngredients(f, 5);
+    assertTrue(html5L.includes(">7.5 ml<"), "expected 7.5 ml for 1.5ml/L * 5L");
+    assertTrue(html5L.includes(">12.5 ml<"), "expected 12.5 ml for 2.5ml/L * 5L");
+  });
+
+  test("getCategoryColor() resolves default colors for all standard categories", () => {
+    assertEqual(getCategoryColor("Biological"), "#0f8a8a");
+    assertEqual(getCategoryColor("Botanical"), "#a3690b");
+    assertEqual(getCategoryColor("Nutrition"), "#1a8f3c");
+    assertEqual(getCategoryColor("Fungicide"), "#7b4fb5");
+    assertEqual(getCategoryColor("Insecticide"), "#b3261e");
+  });
+
   // ---------------------------------------------------------------------
   group("normalizeCropName() — crop identity (feeds P&L grouping)");
 

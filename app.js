@@ -159,6 +159,15 @@ function normalizeCategoryKey(name) {
     return String(name || "").trim().toLowerCase();
 }
 
+// Default color palette mappings for standard agricultural formula categories
+const DEFAULT_CATEGORY_COLORS = {
+    biological:  "#0f8a8a", // teal
+    botanical:   "#a3690b", // amber
+    nutrition:   "#1a8f3c", // green
+    fungicide:   "#7b4fb5", // purple
+    insecticide: "#b3261e"  // red
+};
+
 function getCategoryColorMap() {
     try { return JSON.parse(localStorage.getItem(CATEGORY_COLOR_KEY) || "{}"); }
     catch (e) { return {}; }
@@ -167,7 +176,7 @@ function getCategoryColorMap() {
 function getCategoryColor(categoryName) {
     const key = normalizeCategoryKey(categoryName);
     if (!key) return null;
-    return getCategoryColorMap()[key] || null;
+    return getCategoryColorMap()[key] || DEFAULT_CATEGORY_COLORS[key] || null;
 }
 
 function setCategoryColor(categoryName, hex) {
@@ -1220,7 +1229,97 @@ function renderWeather(data) {
         ${staleNote}`;
 }
 
-// --- 10. Formulas Tab ---
+// --- 10. Formulas Tab & Standard Recipes ---
+const DEFAULT_FORMULAS = [
+    {
+        id: "f_bio_botava",
+        name: "Bio-Botanical Pest Shield",
+        category: "Biological",
+        description: "General preventive foliar spray for soft-bodied insects, whiteflies, and aphids. Apply early morning or late evening.",
+        recipe: "Bio Botava:2.5:ml|Garlic Oil Extract:2:ml",
+        status: "active"
+    },
+    {
+        id: "f_pest_guard",
+        name: "Pest Guard Contact Spray",
+        category: "Botanical",
+        description: "Broad-spectrum organic contact deterrent for caterpillars, thrips, and beetles.",
+        recipe: "Pest Guard 2:3:ml|Garlic Oil Extract:1.5:ml",
+        status: "active"
+    },
+    {
+        id: "f_amino_18",
+        name: "Foliar Growth & Stress Mix",
+        category: "Nutrition",
+        description: "Vegetative boost, root enhancement, and recovery after heavy rain, pest attacks, or transplanting.",
+        recipe: "Amino 18:2:ml",
+        status: "active"
+    },
+    {
+        id: "f_wira_calbo",
+        name: "Calcium-Boron Bloom & Fruit Set",
+        category: "Nutrition",
+        description: "Prevents blossom end rot and fruit cracking, strengthens cell walls, and improves flowering retention.",
+        recipe: "Wira CalBo:2:ml",
+        status: "active"
+    },
+    {
+        id: "f_foliar_combo",
+        name: "Combined Foliar Nutrition Boost",
+        category: "Nutrition",
+        description: "Balanced leaf spray for active vegetative growth and early flowering phases.",
+        recipe: "Amino 18:1.5:ml|Wira CalBo:1.5:ml",
+        status: "active"
+    },
+    {
+        id: "f_antracol",
+        name: "Antracol Protective Spray",
+        category: "Fungicide",
+        description: "Broad-spectrum protective contact fungicide against blight, anthracnose, and leaf spots. Spray before heavy rain cycles.",
+        recipe: "Antracol:2:g",
+        status: "active"
+    },
+    {
+        id: "f_abamectin",
+        name: "Abamectin Mite & Thrip Knockdown",
+        category: "Insecticide",
+        description: "Translaminar insecticide/miticide targeted specifically at severe leafminer, mite, and thrip outbreaks.",
+        recipe: "Abamectin:1:ml",
+        status: "active"
+    },
+    {
+        id: "f_cypermethrin",
+        name: "Cypermethrin Broad-Spectrum Knockdown",
+        category: "Insecticide",
+        description: "Synthetic pyrethroid contact spray for caterpillars, fruit borers, and persistent beetles. Use strictly as a corrective knockdown.",
+        recipe: "Cypermethrin:1.5:ml",
+        status: "active"
+    }
+];
+
+// Seed or upsert default agricultural recipe catalog into Firestore
+async function seedDefaultFormulas() {
+    if (!db) return;
+    try {
+        const batch = db.batch();
+        DEFAULT_FORMULAS.forEach(f => {
+            const docRef = db.collection("formulas").doc(f.id);
+            batch.set(docRef, f, { merge: true });
+        });
+        await batch.commit();
+        console.log("Standard formulas catalog seeded to Firestore.");
+    } catch (err) {
+        console.warn("Batch seeding formulas fallback to doc.set:", err);
+        for (const f of DEFAULT_FORMULAS) {
+            try {
+                await db.collection("formulas").doc(f.id).set(f, { merge: true });
+            } catch (e) {
+                console.error("Failed seeding formula", f.id, e);
+            }
+        }
+    }
+}
+
 function parseRecipe(recipeStr) {
     if (!recipeStr || !recipeStr.includes(':')) return null;
     try {
@@ -1234,9 +1333,10 @@ function parseRecipe(recipeStr) {
 function renderIngredients(ingredients, liters) {
     const vol = parseFloat(liters) || 16;
     return ingredients.map(ing => {
+        const total = ing.amount * vol;
         const calc = ing.unit === 'g'
-            ? (ing.amount * vol).toFixed(1).replace(/\.0$/, '')
-            : Math.round(ing.amount * vol);
+            ? total.toFixed(1).replace(/\.0$/, '')
+            : (Number.isInteger(total) ? String(total) : total.toFixed(1).replace(/\.0$/, ''));
         return `<div class="ingredient-row">
             <span class="ingredient-name">${escapeHtml(ing.name)}</span>
             <span class="ingredient-amount">${calc} ${ing.unit}</span>
@@ -1257,7 +1357,7 @@ function renderFormulas(formulas) {
     formulasData = formulas;
     const container = document.getElementById("formulaList");
     if (!formulas.length) {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No formulas yet. Add them in the Formulas sheet tab.</p>';
+        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No formulas yet.</p>';
         return;
     }
     const vol = parseFloat(document.getElementById("globalSprayerVol")?.value) || 16;
@@ -1293,12 +1393,29 @@ async function fetchFormulas() {
     const container = document.getElementById("formulaList");
     const cached = localStorage.getItem(FORMULAS_CACHE_KEY);
     if (cached) {
-        try { renderFormulas(JSON.parse(cached)); } catch (e) { /* ignore */ }
+        try {
+            const parsed = JSON.parse(cached);
+            if (Array.isArray(parsed) && parsed.length) {
+                renderFormulas(parsed);
+            } else {
+                renderFormulas(DEFAULT_FORMULAS);
+            }
+        } catch (e) {
+            renderFormulas(DEFAULT_FORMULAS);
+        }
     } else {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>';
+        // Cold cache first paint: render standard default catalog instantly
+        renderFormulas(DEFAULT_FORMULAS);
     }
     try {
         const snap = await db.collection("formulas").get();
+        if (snap.empty) {
+            // Seed Firestore with standard catalog on first run
+            await seedDefaultFormulas();
+            localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(DEFAULT_FORMULAS));
+            renderFormulas(DEFAULT_FORMULAS);
+            return;
+        }
         const formulas = snap.docs
             .map(d => ({ ...d.data() }))
             .filter(f => f.status !== "deleted")
@@ -1306,8 +1423,9 @@ async function fetchFormulas() {
         localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(formulas));
         renderFormulas(formulas);
     } catch (e) {
-        if (!cached) {
-            container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">Could not load formulas.</p>';
+        console.warn("fetchFormulas note:", e);
+        if (!cached && (!formulasData || !formulasData.length)) {
+            renderFormulas(DEFAULT_FORMULAS);
         }
     }
 }
@@ -1643,9 +1761,10 @@ function applyFormula(index) {
     let text = `${formula.name} — ${vol}L sprayer`;
     if (ingredients) {
         const parts = ingredients.map(ing => {
+            const total = ing.amount * vol;
             const calc = ing.unit === 'g'
-                ? (ing.amount * vol).toFixed(1).replace(/\.0$/, '')
-                : Math.round(ing.amount * vol);
+                ? total.toFixed(1).replace(/\.0$/, '')
+                : (Number.isInteger(total) ? String(total) : total.toFixed(1).replace(/\.0$/, ''));
             return `${ing.name}: ${calc}${ing.unit}`;
         });
         text += `\n${parts.join(", ")}`;
