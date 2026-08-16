@@ -280,6 +280,10 @@ function openModal(type) {
     scopeEl.value = stillValid ? lastBed : "all";
 
     updateBedFields();
+    if (document.getElementById("logTankCount")) {
+        document.getElementById("logTankCount").value = 1;
+    }
+    updateSprayerTotalDisplay();
     document.getElementById("modalOverlay").classList.add("open");
     document.body.style.overflow = "hidden";
 }
@@ -622,13 +626,16 @@ function handleSubmit(event) {
     // Optimistically update lastActivity/lastWatered on bed cards.
     if (bedScope.startsWith("plot_")) {
         const members = bedsInPlot(bedScope);
-        if (activity === "watering") {
-            members.forEach(b => {
+        members.forEach(b => {
+            b.lastActivity = { type: activity, date };
+            const bedUpdate = { lastActivity: { type: activity, date } };
+            if (activity === "watering") {
                 b.lastWatered = date;
-                db.collection("beds").doc(String(b.bedNumber)).update({ lastWatered: date })
-                    .catch(e => console.error("updateBed lastWatered failed:", e));
-            });
-        }
+                bedUpdate.lastWatered = date;
+            }
+            db.collection("beds").doc(String(b.bedNumber)).update(bedUpdate)
+                .catch(e => console.error("updateBed plot member failed:", e));
+        });
         saveBeds();
         renderBeds(bedsData);
     } else if (bedScope !== "all") {
@@ -1823,16 +1830,30 @@ function toggleFormulaPicker() {
     list.hidden = false;
 }
 
+function updateSprayerTotalDisplay() {
+    const tankSize  = parseFloat(document.getElementById("logSprayerVol")?.value) || 16;
+    const tankCount = parseFloat(document.getElementById("logTankCount")?.value) || 1;
+    const total     = (tankSize * tankCount).toFixed(1).replace(/\.0$/, '');
+    const disp      = document.getElementById("logSprayerTotalDisplay");
+    if (disp) {
+        disp.innerHTML = `Total mix: <strong>${total} L</strong> (${tankCount} tank${tankCount === 1 ? '' : 's'} × ${tankSize}L)`;
+    }
+}
+
 function applyFormula(index) {
     const formula     = formulasData[index];
     if (!formula) return;
     const ingredients = parseRecipe(formula.recipe);
-    const vol         = parseFloat(document.getElementById("globalSprayerVol")?.value) || 16;
+    const tankSize    = parseFloat(document.getElementById("logSprayerVol")?.value) || parseFloat(document.getElementById("globalSprayerVol")?.value) || 16;
+    const tankCount   = parseFloat(document.getElementById("logTankCount")?.value) || 1;
+    const totalVol    = tankSize * tankCount;
 
-    let text = `${formula.name} — ${vol}L sprayer`;
+    let text = tankCount > 1
+        ? `${formula.name} — ${tankCount} tanks × ${tankSize}L (${totalVol}L total)`
+        : `${formula.name} — ${totalVol}L sprayer`;
     if (ingredients) {
         const parts = ingredients.map(ing => {
-            const total = ing.amount * vol;
+            const total = ing.amount * totalVol;
             const calc = ing.unit === 'g'
                 ? total.toFixed(1).replace(/\.0$/, '')
                 : (Number.isInteger(total) ? String(total) : total.toFixed(1).replace(/\.0$/, ''));
@@ -2244,6 +2265,15 @@ function planDayLabel(dateStr) {
     return weekday + " · " + shortDate(dateStr);
 }
 
+function resolveTaskScopeMeta(task) {
+    if (!task || !task.bedNumber) return "Whole Farm";
+    if (String(task.bedNumber).startsWith("plot_")) {
+        const plot = getPlot(task.bedNumber);
+        return plot ? `🗂️ ${plot.name}` : "Plot";
+    }
+    return `Bed ${task.bedNumber}`;
+}
+
 function renderTaskCard(task) {
     const formula = task.formulaId ? formulasData.find(f => String(f.id) === String(task.formulaId)) : null;
     const isDone  = task.status === "done";
@@ -2259,7 +2289,8 @@ function renderTaskCard(task) {
     if (formula && formula.description) descParts.push(formula.description);
     if (task.note) descParts.push(task.note);
     const desc = descParts.join(" — ");
-    const bedLine = task.bedNumber ? `<p class="task-bed">Bed ${escapeHtml(String(task.bedNumber))}</p>` : "";
+    const scopeMeta = resolveTaskScopeMeta(task);
+    const bedLine = `<p class="task-bed">${escapeHtml(scopeMeta)}</p>`;
 
     return `
     <div class="task-card">
@@ -2332,7 +2363,7 @@ function renderTodayTaskRow(task) {
     const color   = formula ? getCategoryColor(formula.category) : null;
     const icon    = CATEGORY_ICON[task.activityCategory] || "📝";
     const title   = formula ? formula.name : (task.note || "Task");
-    const bedMeta = task.bedNumber ? `Bed ${escapeHtml(String(task.bedNumber))}` : "Whole Farm";
+    const bedMeta = resolveTaskScopeMeta(task);
     const slotShort = task.timeSlot && task.timeSlot !== "Anytime" ? TIME_SLOT_SHORT[task.timeSlot] : "";
     const meta = slotShort ? `${bedMeta} · ${slotShort}` : bedMeta;
 
@@ -2414,14 +2445,33 @@ function openTaskModal() {
         b.classList.toggle("selected", b.dataset.slot === "Anytime")
     );
 
-    const bedSelect = document.getElementById("taskBed");
-    while (bedSelect.options.length > 1) bedSelect.remove(1);
-    bedsData.forEach(bed => {
-        const opt = document.createElement("option");
-        opt.value = bed.bedNumber;
-        opt.textContent = "Bed " + bed.bedNumber;
-        bedSelect.appendChild(opt);
-    });
+    const plotGroup = document.getElementById("taskPlotScopeGroup");
+    const bedGroup  = document.getElementById("taskBedScopeGroup");
+    if (plotGroup && bedGroup) {
+        plotGroup.innerHTML = "";
+        bedGroup.innerHTML  = "";
+        plotsData.forEach(plot => {
+            const opt = document.createElement("option");
+            opt.value = plot.id;
+            opt.textContent = plot.name;
+            plotGroup.appendChild(opt);
+        });
+        bedsData.forEach(bed => {
+            const opt = document.createElement("option");
+            opt.value = bed.bedNumber;
+            opt.textContent = "Bed " + bed.bedNumber;
+            bedGroup.appendChild(opt);
+        });
+    } else {
+        const bedSelect = document.getElementById("taskBed");
+        while (bedSelect.options.length > 1) bedSelect.remove(1);
+        bedsData.forEach(bed => {
+            const opt = document.createElement("option");
+            opt.value = bed.bedNumber;
+            opt.textContent = "Bed " + bed.bedNumber;
+            bedSelect.appendChild(opt);
+        });
+    }
 
     populateTaskFormulaList();
 
@@ -2618,6 +2668,25 @@ function deletePlot() {
     populateBedDropdown();
     closePlotDetail();
     showToast("Plot deleted");
+}
+
+// Trigger quick logging directly for an entire plot from inside the Plot Detail sheet
+function logForPlot(type) {
+    const plotId = currentPlotId;
+    if (!plotId) return;
+    closePlotDetail();
+
+    if (type === "spray") {
+        openModal("pest");
+        document.getElementById("bedScope").value = plotId;
+        updateBedFields();
+        if (document.getElementById("inputsField").hidden) toggleInputs();
+        toggleFormulaPicker();
+    } else {
+        openModal(type);
+        document.getElementById("bedScope").value = plotId;
+        updateBedFields();
+    }
 }
 
 // Helper: open a bed detail from inside a plot detail sheet.

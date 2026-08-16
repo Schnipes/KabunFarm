@@ -1609,16 +1609,54 @@ textarea {
 }
 
 /* ---------- Bed detail — activity picker ---------- */
-.bed-log-actions {
+.bed-log-actions,
+.plot-log-actions {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 10px;
   margin-top: 16px;
 }
 
-.bed-log-actions .action-btn {
+.plot-log-actions {
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.bed-log-actions .action-btn,
+.plot-log-actions .action-btn {
   min-height: 72px;
   font-size: 14px;
+}
+
+.plot-log-actions .action-btn {
+  min-height: 64px;
+  font-size: 12px;
+  padding: 8px 2px;
+  gap: 4px;
+}
+
+.plot-log-actions .action-btn .icon {
+  font-size: 20px;
+}
+
+.formula-volume-compound {
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.formula-volume-col {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.formula-volume-total {
+  width: 100%;
+  font-size: 12.5px;
+  color: var(--color-primary-dark);
+  padding-top: 8px;
+  border-top: 1px dashed var(--color-border);
+  text-align: right;
 }
 
 /* ---------- Activity tab — bed filter chips ---------- */

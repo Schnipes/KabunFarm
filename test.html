@@ -563,6 +563,32 @@
   });
 
   // ---------------------------------------------------------------------
+  group("resolveTaskScopeMeta() — Plot and Bed task scopes");
+
+  test("resolves Whole Farm for empty bedNumber", () => {
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "" }), "Whole Farm");
+    assertEqual(resolveTaskScopeMeta({ bedNumber: null }), "Whole Farm");
+  });
+
+  test("resolves Bed number for single bed", () => {
+    assertEqual(resolveTaskScopeMeta({ bedNumber: 5 }), "Bed 5");
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "12" }), "Bed 12");
+  });
+
+  test("resolves Plot name for plot-scoped task", () => {
+    plotsData = [{ id: "plot_eggplant", name: "Eggplant Plot" }];
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "plot_eggplant" }), "🗂️ Eggplant Plot");
+  });
+
+  test("multi-tank formula dosage scaling scales accurately across tanks", () => {
+    const f = parseRecipe("Bio Botava:2.5:ml|Garlic Oil Extract:2:ml");
+    const totalVol = 16 * 2; // 2 tanks of 16L = 32L
+    const rendered = renderIngredients(f, totalVol);
+    assertTrue(rendered.includes(">80 ml<"), "expected 80 ml Bio Botava for 2x16L tanks");
+    assertTrue(rendered.includes(">64 ml<"), "expected 64 ml Garlic Oil for 2x16L tanks");
+  });
+
+  // ---------------------------------------------------------------------
   // Render results
   let total = 0, failed = 0;
   const resultsEl = document.getElementById("results");

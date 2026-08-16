@@ -275,12 +275,25 @@
             Inputs used
             <span class="hint" id="inputsHint">e.g. Master Mix, LAB serum, BSF compost</span>
           </label>
-          <div class="formula-volume-global" id="logSprayerVolRow" hidden>
-            <span class="formula-calc-label">Sprayer volume</span>
-            <div class="formula-volume-wrap">
-              <input type="number" id="logSprayerVol" value="16" min="1" max="100" step="1"
-                     oninput="document.getElementById('globalSprayerVol').value = this.value;">
-              <span class="formula-volume-unit">L</span>
+          <div class="formula-volume-global formula-volume-compound" id="logSprayerVolRow" hidden>
+            <div class="formula-volume-col">
+              <span class="formula-calc-label">Tank size</span>
+              <div class="formula-volume-wrap">
+                <input type="number" id="logSprayerVol" value="16" min="1" max="100" step="1"
+                       oninput="document.getElementById('globalSprayerVol').value = this.value; updateSprayerTotalDisplay();">
+                <span class="formula-volume-unit">L</span>
+              </div>
+            </div>
+            <div class="formula-volume-col">
+              <span class="formula-calc-label">Tanks</span>
+              <div class="formula-volume-wrap">
+                <input type="number" id="logTankCount" value="1" min="1" max="50" step="1"
+                       oninput="updateSprayerTotalDisplay();">
+                <span class="formula-volume-unit">tanks</span>
+              </div>
+            </div>
+            <div class="formula-volume-total" id="logSprayerTotalDisplay">
+              Total mix: <strong>16 L</strong>
             </div>
           </div>
           <button type="button" class="formula-pick-btn" onclick="toggleFormulaPicker()">🧪 Pick from formulas</button>
@@ -411,9 +424,11 @@
         </div>
 
         <div class="form-field">
-          <label for="taskBed">Bed <span class="hint">optional</span></label>
+          <label for="taskBed">Farm scope <span class="hint">optional — plot, bed, or whole farm</span></label>
           <select id="taskBed">
             <option value="">Whole Farm</option>
+            <optgroup label="Plots" id="taskPlotScopeGroup"></optgroup>
+            <optgroup label="Beds" id="taskBedScopeGroup"></optgroup>
           </select>
         </div>
 
@@ -477,6 +492,20 @@
         <button class="modal-close" onclick="closePlotDetail()" aria-label="Close">✕</button>
       </div>
       <div id="plotDetailContent"></div>
+      <div class="plot-log-actions">
+        <button class="action-btn water" onclick="logForPlot('water')">
+          <span class="icon" aria-hidden="true">💧</span><span>Irrigate</span>
+        </button>
+        <button class="action-btn pest" onclick="logForPlot('pest')">
+          <span class="icon" aria-hidden="true">🐛</span><span>Pest</span>
+        </button>
+        <button class="action-btn crop" onclick="logForPlot('spray')">
+          <span class="icon" aria-hidden="true">🧪</span><span>Formula</span>
+        </button>
+        <button class="action-btn harvest" onclick="logForPlot('harvest')">
+          <span class="icon" aria-hidden="true">🧺</span><span>Harvest</span>
+        </button>
+      </div>
       <button class="add-bed-btn" style="width:100%;margin-top:12px;" onclick="openPlotAssignModal(currentPlotId)">✏️ Edit beds in this plot</button>
       <button class="bed-delete-btn" onclick="deletePlot()">Delete this plot</button>
     </div>
