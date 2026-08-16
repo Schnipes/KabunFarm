@@ -166,24 +166,33 @@ export function syncDatePresets(inputId) {
 }
 
 // --- 3. Activity Log Modal ---
-export function openModal(type) {
+export function openModal(type, targetBed) {
     document.getElementById("modalTitle").textContent = MODAL_TITLES[type] || "Log activity";
     document.getElementById("logDate").value = todayString();
     syncDatePresets("logDate");
     document.getElementById("activityCategory").value = DEFAULT_CATEGORY[type] || "";
 
-    const lastBed = localStorage.getItem(LAST_BED_KEY);
+    populateBedDropdown();
+
     const scopeEl = document.getElementById("bedScope");
-    const stillValid = lastBed && (
-        lastBed === "all" ||
-        state.bedsData.some(b => String(b.bedNumber) === String(lastBed)) ||
-        (lastBed.startsWith("plot_") && !!getPlot(lastBed))
-    );
-    if (scopeEl) scopeEl.value = stillValid ? lastBed : "all";
+    const lastBed = localStorage.getItem(LAST_BED_KEY);
+    const chosen = targetBed || (type === "crop" && state.selectedBedForLog) || lastBed;
+
+    if (scopeEl) {
+        if (targetBed) {
+            scopeEl.value = String(targetBed);
+        } else if (chosen && (type !== "crop" || (chosen !== "all" && !String(chosen).startsWith("plot_") && chosen !== "multi"))) {
+            scopeEl.value = String(chosen);
+        } else if (type === "crop" && state.bedsData.length) {
+            scopeEl.value = String(state.bedsData[0].bedNumber);
+        } else {
+            scopeEl.value = "all";
+        }
+    }
 
     updateBedFields();
     if (document.getElementById("logTankCount")) {
-        document.getElementById("logTankCount").value = 1;
+        document.getElementById("logTankCount").value = "1";
     }
     state.selectedQuickFormulaId = null;
     updateSprayerTotalDisplay();
@@ -612,12 +621,16 @@ export function toggleBedPlotPicker() {
 }
 
 export function logForBed(type) {
+    const targetBed = state.selectedBedForLog;
     state.bedDetailReturnPlotId = null;
     closeBedDetail();
-    openModal(type);
-    const scopeEl = document.getElementById("bedScope");
-    if (scopeEl) scopeEl.value = state.selectedBedForLog;
-    updateBedFields();
+    openModal(type, targetBed);
+}
+
+export function logForPlot(type) {
+    const plotId = state.currentPlotId;
+    closePlotDetail();
+    openModal(type === "spray" ? "water" : type, plotId);
 }
 
 // --- 5. Sales Modal ---
@@ -1296,6 +1309,7 @@ if (typeof window !== "undefined") {
         toggleBedRename,
         toggleBedPlotPicker,
         logForBed,
+        logForPlot,
         openBedDetail,
         closeBedDetail,
         purgeAllBedsAndPlots,
