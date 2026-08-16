@@ -651,7 +651,10 @@ function switchView(viewName) {
         fetchLogs();
     }
     if (viewName === "formulas") fetchFormulas();
-    if (viewName === "plan") fetchTasks();
+    if (viewName === "plan") {
+        renderPlanView();
+        fetchTasks();
+    }
 }
 
 // --- 9. Beds (Home Screen) ---
@@ -2131,22 +2134,36 @@ async function fetchTasks() {
     const cached = localStorage.getItem(TASKS_CACHE_KEY);
     if (cached) {
         try {
-            tasksData = JSON.parse(cached).map(t => ({ ...t, date: ymd(t.date) }));
+            tasksData = JSON.parse(cached)
+                .filter(t => t && t.status !== "deleted")
+                .map(t => ({ ...t, date: ymd(t.date) }));
             renderPlanView();
             renderTodayTasks();
-        } catch (e) { /* ignore corrupt cache */ }
+        } catch (e) {
+            renderPlanView();
+            renderTodayTasks();
+        }
+    } else {
+        // Instant first paint on cold cache: render empty plan schedule right away
+        renderPlanView();
+        renderTodayTasks();
     }
+
+    if (!db) return;
+
     try {
         const snap = await db.collection("tasks").get();
         tasksData = snap.docs
             .map(d => ({ ...d.data() }))
-            .filter(t => t.status !== "deleted")
+            .filter(t => t && t.status !== "deleted")
             .map(t => ({ ...t, date: ymd(t.date) }));
         localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
         renderPlanView();
         if (typeof renderTodayTasks === "function") renderTodayTasks();
     } catch (e) {
-        console.error("Could not load tasks:", e);
+        console.error("Could not load tasks from Firestore:", e);
+        renderPlanView();
+        if (typeof renderTodayTasks === "function") renderTodayTasks();
     }
 }
 
