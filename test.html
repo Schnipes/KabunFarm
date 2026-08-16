@@ -87,6 +87,7 @@
   <div id="financialsField"></div>
   <div id="toggleInputsBtn"></div>
   <div id="toggleFinancialsBtn"></div>
+  <input id="logTankCount">
   <input id="newCropName">
   <input id="saleCrop">
   <input id="saleQty">
@@ -128,9 +129,8 @@
   const { setDatePreset, syncDatePresets, addBed, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
-  let bedsData = State.state.bedsData;
-  let plotsData = State.state.plotsData;
-  let formulasData = State.state.formulasData;
+  // We no longer shadow the global state with 'let' variables.
+  // Tests must write directly to State.state.bedsData, etc.
 
   const groups = [];
   let current = null;
@@ -297,13 +297,13 @@
   group("getBed() — single front door for bed lookup");
 
   test("finds a bed by number, matching loosely (string vs number)", () => {
-    bedsData = [{ bedNumber: 5, crops: [] }, { bedNumber: 12, crops: [] }];
+    State.state.bedsData = [{ bedNumber: 5, crops: [] }, { bedNumber: 12, crops: [] }];
     assertEqual(getBed(12).bedNumber, 12);
     assertEqual(getBed("12").bedNumber, 12);
   });
 
   test("returns undefined for a bed number that doesn't exist", () => {
-    bedsData = [{ bedNumber: 5, crops: [] }];
+    State.state.bedsData = [{ bedNumber: 5, crops: [] }];
     assertEqual(getBed(999), undefined);
   });
 
@@ -311,13 +311,13 @@
   group("getPlot() / bedsInPlot() / plotWateringRollup() — plot membership");
 
   test("getPlot() finds a plot by id", () => {
-    plotsData = [{ id: "p1", name: "Eggplant Row", status: "active" }];
+    State.state.plotsData = [{ id: "p1", name: "Eggplant Row", status: "active" }];
     assertEqual(getPlot("p1").name, "Eggplant Row");
     assertEqual(getPlot("nope"), undefined);
   });
 
   test("bedsInPlot() filters by exclusive plotId membership", () => {
-    bedsData = [
+    State.state.bedsData = [
       { bedNumber: 1, plotId: "p1", crops: [] },
       { bedNumber: 2, plotId: "p1", crops: [] },
       { bedNumber: 3, plotId: "p2", crops: [] },
@@ -329,7 +329,7 @@
 
   test("plotWateringRollup() counts flagged beds, ignoring an empty-crops bed", () => {
     localStorage.setItem("farmlog_logs_cache", "[]");
-    bedsData = [
+    State.state.bedsData = [
       { bedNumber: 1, plotId: "p1", crops: [{ cropName: "Eggplant" }], lastWatered: daysAgoStr(5) },
       { bedNumber: 2, plotId: "p1", crops: [{ cropName: "Eggplant" }], lastWatered: daysAgoStr(1) },
       { bedNumber: 3, plotId: "p1", crops: [], lastWatered: daysAgoStr(9) } // empty bed — never flagged
@@ -527,25 +527,25 @@
   group("normalizeCropName() — crop identity (feeds P&L grouping)");
 
   test("snaps case-insensitively onto an existing crop name", () => {
-    bedsData = [{ bedNumber: 1, crops: [{ cropName: "Kangkong", plantingDate: "2026-06-01" }], cropHistory: [] }];
+    State.state.bedsData = [{ bedNumber: 1, crops: [{ cropName: "Kangkong", plantingDate: "2026-06-01" }], cropHistory: [] }];
     localStorage.setItem("farmlog_sales_cache", "[]");
     assertEqual(normalizeCropName("kangkong"), "Kangkong");
     assertEqual(normalizeCropName("KANGKONG"), "Kangkong");
   });
 
   test("trims whitespace and snaps", () => {
-    bedsData = [{ bedNumber: 1, crops: [{ cropName: "Kangkong", plantingDate: "2026-06-01" }], cropHistory: [] }];
+    State.state.bedsData = [{ bedNumber: 1, crops: [{ cropName: "Kangkong", plantingDate: "2026-06-01" }], cropHistory: [] }];
     assertEqual(normalizeCropName("  kangkong  "), "Kangkong");
   });
 
   test("unknown crop name passes through unchanged (trimmed)", () => {
-    bedsData = [];
+    State.state.bedsData = [];
     localStorage.setItem("farmlog_sales_cache", "[]");
     assertEqual(normalizeCropName(" Bitter Gourd "), "Bitter Gourd");
   });
 
   test("also matches names known only from crop history and sales", () => {
-    bedsData = [{ bedNumber: 1, crops: [], cropHistory: [{ cropName: "Okra" }] }];
+    State.state.bedsData = [{ bedNumber: 1, crops: [], cropHistory: [{ cropName: "Okra" }] }];
     localStorage.setItem("farmlog_sales_cache", JSON.stringify([{ id: "s1", crop: "Cili Padi" }]));
     assertEqual(normalizeCropName("okra"), "Okra");
     assertEqual(normalizeCropName("cili padi"), "Cili Padi");
@@ -578,12 +578,12 @@
   });
 
   test("a plot-scoped bedNumber resolves to the plot's name", () => {
-    plotsData = [{ id: "plot_x", name: "Eggplant Row", status: "active" }];
+    State.state.plotsData = [{ id: "plot_x", name: "Eggplant Row", status: "active" }];
     assertEqual(resolveLogScopeLabel({ bedNumber: "plot_x" }), "Eggplant Row");
   });
 
   test("a plot-scoped bedNumber for a since-deleted plot falls back gracefully", () => {
-    plotsData = [];
+    State.state.plotsData = [];
     assertEqual(resolveLogScopeLabel({ bedNumber: "plot_gone" }), "Plot (deleted)");
   });
 
@@ -621,7 +621,7 @@
   });
 
   test("resolves Plot name for plot-scoped task", () => {
-    plotsData = [{ id: "plot_eggplant", name: "Eggplant Plot" }];
+    State.state.plotsData = [{ id: "plot_eggplant", name: "Eggplant Plot" }];
     assertEqual(resolveTaskScopeMeta({ bedNumber: "plot_eggplant" }), "🗂️ Eggplant Plot");
   });
 
@@ -637,7 +637,7 @@
   group("High-Density Bed Grid & Zero-Accordion Logic");
 
   test("groupByPlot correctly splits 22 eggplant beds into plot group", () => {
-    plotsData = [{ id: "plot_eggplant", name: "Eggplant Plot" }];
+    State.state.plotsData = [{ id: "plot_eggplant", name: "Eggplant Plot" }];
     const beds = [];
     for (let i = 1; i <= 22; i++) {
       beds.push({ bedNumber: i, plotId: "plot_eggplant", crops: [{ cropName: "Eggplant" }] });
@@ -694,6 +694,98 @@
     assertEqual(input.value, "1");
     stepTankCount(-1);
     assertEqual(input.value, "1", "tank count should not drop below 1");
+  });
+
+  // ---------------------------------------------------------------------
+  group("3-Way Watering Logic Edge Cases");
+
+  test("getWateringStatus resolves conflicting Bed vs Plot logs correctly", () => {
+    // Bed watered 3 days ago, Plot watered today. Plot wins.
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { activityCategory: "watering", bedNumber: 5, date: daysAgoStr(3), status: "synced" },
+      { activityCategory: "watering", bedNumber: "plot_test", date: todayString(), status: "synced" }
+    ]));
+    const bed = { bedNumber: 5, plotId: "plot_test", crops: [{ cropName: "Tomato" }] };
+    const status = getWateringStatus(bed);
+    assertEqual(status.days, 0, "Plot log should override older bed log");
+    assertEqual(status.needsWater, false);
+  });
+
+  test("getWateringStatus flags needsWater for multi-day gaps", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { activityCategory: "watering", bedNumber: 5, date: daysAgoStr(4), status: "synced" }
+    ]));
+    const bed = { bedNumber: 5, crops: [{ cropName: "Tomato" }], lastWatered: daysAgoStr(4) };
+    const status = getWateringStatus(bed);
+    assertEqual(status.days, 4);
+    assertEqual(status.needsWater, true, "Gap >= 3 days should need water");
+  });
+
+  // ---------------------------------------------------------------------
+  group("Tank Stepper & Dilution Math Edge Cases");
+
+  test("renderIngredients handles 0L volume correctly", () => {
+    const f = parseRecipe("A:10:ml");
+    const rendered = renderIngredients(f, 0);
+    assertTrue(rendered.includes(">0 ml<") || rendered.includes(">160 ml<"), "Fallback to 16L if 0 or falsy");
+    // Actually, parseFloat(0) is falsy in JS if written as `parseFloat(liters) || 16`
+    // Let's test standard behavior (fallback to 16 if 0) vs explicit 0.
+    const expected = (parseFloat(0) || 16) * 10;
+    assertTrue(rendered.includes(">" + expected + " ml<"));
+  });
+
+  test("renderIngredients scales to extreme sprayer sizes (e.g. 1000L IBC tank)", () => {
+    const f = parseRecipe("Fertilizer:5:ml");
+    const rendered = renderIngredients(f, 1000);
+    assertTrue(rendered.includes(">5000 ml<"), "1000L * 5ml/L should yield 5000ml");
+  });
+
+  test("parseRecipe handles multi-ingredient ratios and complex spacing", () => {
+    const f = parseRecipe("  Part A : 1.5 : g | Part B: 2.25: ml  ");
+    assertEqual(f.length, 2);
+    assertEqual(f[0].name, "Part A");
+    assertEqual(f[0].amount, 1.5);
+    assertEqual(f[0].unit, "g");
+    assertEqual(f[1].name, "Part B");
+    assertEqual(f[1].amount, 2.25);
+    assertEqual(f[1].unit, "ml");
+  });
+
+  // ---------------------------------------------------------------------
+  group("Crop P&L Metrics Edge Cases");
+
+  test("computeCropPL handles zero harvests and negative margins", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { cropName: "Failure Crop", activityCategory: "maintenance", costRM: "100", status: "synced" }
+    ]));
+    localStorage.setItem("farmlog_sales_cache", JSON.stringify([]));
+    const pl = computeCropPL();
+    assertEqual(pl.length, 1);
+    assertEqual(pl[0].cropName, "Failure Crop");
+    assertEqual(pl[0].cost, 100);
+    assertEqual(pl[0].revenue, 0);
+    assertEqual(pl[0].net, -100, "Net should be negative margin");
+    assertEqual(pl[0].weightKg, 0);
+    assertEqual(pl[0].costPerKg, null);
+  });
+
+  test("computeCropPL handles decimal rounding and shared costs accurately", () => {
+    localStorage.setItem("farmlog_logs_cache", JSON.stringify([
+      { cropName: "Crop A, Crop B", activityCategory: "maintenance", costRM: "33.33", status: "synced" },
+      { cropName: "Crop A", activityCategory: "harvest", weight: "1.5", status: "synced" }
+    ]));
+    localStorage.setItem("farmlog_sales_cache", JSON.stringify([
+      { crop: "Crop A", totalRevenue: "10.50" },
+      { crop: "Crop B", totalRevenue: "20.15" }
+    ]));
+    const pl = computeCropPL();
+    // Sorted by net: Crop B (20.15 - 16.665 = 3.485) vs Crop A (10.50 - 16.665 = -6.165)
+    assertEqual(pl.length, 2);
+    const cropB = pl.find(c => c.cropName === "Crop B");
+    assertEqual(Math.abs(cropB.cost - 16.665) < 0.001, true);
+    assertEqual(cropB.net, 20.15 - 16.665);
+    const cropA = pl.find(c => c.cropName === "Crop A");
+    assertEqual(cropA.weightKg, 1.5);
   });
 
   // ---------------------------------------------------------------------
