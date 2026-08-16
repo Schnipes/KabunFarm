@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html><head><title>Click Diagnostic</title></head>
+<body>
+<h2>Live Click Diagnostic</h2>
+<p>Open your browser console (F12 → Console) on the main app page (<a href="http://localhost:8080">localhost:8080</a>) and paste the following code:</p>
+<pre id="code" style="background:#f4f4f4;padding:16px;border-radius:8px;font-size:12px;overflow-x:auto;white-space:pre-wrap;">
+// === PASTE THIS INTO THE CONSOLE ON THE MAIN APP PAGE ===
+
+// 1. Check if openBedDetail exists
+console.log("openBedDetail:", typeof window.openBedDetail);
+console.log("openPlotDetail:", typeof window.openPlotDetail);
+
+// 2. Check all overlays for unexpected .open class
+document.querySelectorAll(".modal-overlay").forEach(el => {
+    console.log("Overlay:", el.id, "open:", el.classList.contains("open"), "pointer-events:", getComputedStyle(el).pointerEvents);
+});
+
+// 3. Check if bedGridList is hidden
+const grid = document.getElementById("bedGridList");
+console.log("bedGridList hidden:", grid?.hidden, "display:", grid && getComputedStyle(grid).display);
+
+// 4. Check if bed tiles exist in the DOM
+const tiles = document.querySelectorAll(".bed-tile");
+console.log("Total .bed-tile elements:", tiles.length);
+if (tiles.length > 0) {
+    const first = tiles[0];
+    console.log("First tile outerHTML:", first.outerHTML.substring(0, 200));
+    console.log("First tile onclick attr:", first.getAttribute("onclick"));
+    console.log("First tile data-bed:", first.dataset.bed);
+    console.log("First tile pointer-events:", getComputedStyle(first).pointerEvents);
+    console.log("First tile position:", getComputedStyle(first).position);
+    console.log("First tile z-index:", getComputedStyle(first).zIndex);
+}
+
+// 5. Check for elements covering the grid area
+if (tiles.length > 0) {
+    const rect = tiles[0].getBoundingClientRect();
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    const topEl = document.elementFromPoint(cx, cy);
+    console.log("Element at center of first tile:", topEl?.tagName, topEl?.className, topEl?.id);
+    console.log("Is it the tile itself?", topEl === tiles[0] || tiles[0].contains(topEl));
+}
+
+// 6. Test calling openBedDetail directly
+if (tiles.length > 0) {
+    const bedNum = tiles[0].dataset.bed;
+    console.log("Attempting openBedDetail('" + bedNum + "')...");
+    try {
+        window.openBedDetail(bedNum);
+        console.log("openBedDetail succeeded! Check if overlay opened.");
+        const overlay = document.getElementById("bedDetailOverlay");
+        console.log("bedDetailOverlay has .open:", overlay?.classList.contains("open"));
+    } catch (err) {
+        console.error("openBedDetail FAILED:", err.message, err.stack);
+    }
+}
+
+// 7. Add a test click listener to verify clicks are reaching the tiles
+document.addEventListener("click", function debugClick(e) {
+    console.log("CLICK on:", e.target.tagName, e.target.className, "closest .bed-tile:", e.target.closest(".bed-tile")?.dataset?.bed || "none");
+}, { once: true });
+console.log("Click listener added. Click any bed tile now and check the next console message.");
+</pre>
+<script>
+// Copy button
+const code = document.getElementById("code");
+const btn = document.createElement("button");
+btn.textContent = "📋 Copy to Clipboard";
+btn.style.cssText = "margin:12px 0;padding:10px 20px;font-size:14px;cursor:pointer;border-radius:8px;border:1px solid #ccc;background:#fff;";
+btn.onclick = () => { navigator.clipboard.writeText(code.textContent.trim()); btn.textContent = "✅ Copied!"; setTimeout(() => btn.textContent = "📋 Copy to Clipboard", 2000); };
+code.before(btn);
+</script>
+</body>
+</html>
