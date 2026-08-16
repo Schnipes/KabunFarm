@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farmlog-cache-77eb1b1';
+const CACHE_NAME = 'farmlog-cache-a1b2c3d';
 
 const urlsToCache = [
   './',
@@ -17,6 +17,10 @@ self.addEventListener('install', event => {
 });
 
 self.addEventListener('fetch', event => {
+  // Only cache-first for same-origin (local app files).
+  // External requests (Firebase SDK, Open-Meteo API) bypass the SW entirely
+  // so they always get the latest version from the network.
+  if (new URL(event.request.url).origin !== location.origin) return;
   event.respondWith(
     caches.match(event.request)
       .then(response => response || fetch(event.request))

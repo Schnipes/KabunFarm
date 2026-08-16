@@ -341,6 +341,7 @@ function updateBedFields() {
     // whole-farm and plot scope both get forced to the first real bed.
     if (isSowing && (scope === "all" || isPlot) && bedsData.length) {
         document.getElementById("bedScope").value = bedsData[0].bedNumber;
+        showToast("Sowing requires a specific bed — switched to Bed " + bedsData[0].bedNumber);
         updateBedFields();
         return;
     }
@@ -983,6 +984,16 @@ function deleteBed() {
     const label = bed.name ? `Bed ${bed.bedNumber} · ${bed.name}` : `Bed ${bed.bedNumber}`;
     if (!confirm(`Retire ${label}? It will be hidden from the home screen.`)) return;
 
+    // Mark active crops on this bed as done so they don't become orphaned batches.
+    if (bed.crops && bed.crops.length) {
+        bed.crops.forEach(c => {
+            if (c.id) {
+                db.collection("batches").doc(c.id).update({ status: "done", harvestDate: todayString() })
+                    .catch(e => console.error("retireBatch failed:", e));
+            }
+        });
+    }
+
     bedsData = bedsData.filter(b => String(b.bedNumber) !== String(selectedBedForLog));
     saveBeds();
     renderBeds(bedsData);
@@ -1028,7 +1039,7 @@ function addBed() {
         lastWatered:  null
     };
 
-    bedsData.push({ bedNumber: nextNum, location: "commercial", plotId: "", crops: [] });
+    bedsData.push(newBed);
     saveBeds();
     renderBeds(bedsData);
     populateBedDropdown();
@@ -1511,7 +1522,7 @@ function renderLogs(logs) {
     const container = document.getElementById("logList");
 
     const filtered = logs
-        .filter(log => activeLogFilter === "all" || (log.activityCategory === "sale" ? activeLogFilter === "all" : String(log.bedNumber) === String(activeLogFilter)))
+        .filter(log => activeLogFilter === "all" || log.activityCategory === "sale" || String(log.bedNumber) === String(activeLogFilter))
         .filter(log => activeTypeFilter === "all" || log.activityCategory === activeTypeFilter);
 
     if (!filtered.length) {
@@ -2471,6 +2482,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         indicator.style.opacity = "0";
         if (pull >= PTR_THRESHOLD) {
             fetchBeds();
+            fetchFormulas();
             fetchLogs();
             fetchTasks();
             fetchPlots();
