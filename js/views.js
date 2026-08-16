@@ -143,7 +143,7 @@ export function renderBedTile(bed) {
     const safeBedNum = escapeHtml(String(bed.bedNumber));
 
     return `
-    <div class="bed-tile${warnWater ? " needs-water" : ""}${!isGrowing ? " is-empty" : ""}" onclick="openBedDetail('${safeBedNum}')">
+    <div class="bed-tile${warnWater ? " needs-water" : ""}${!isGrowing ? " is-empty" : ""}" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
         <span class="bed-tile-num">${safeBedNum}</span>
         <span class="bed-tile-crop">${escapeHtml(cropName)}</span>
         <div class="bed-tile-status">
@@ -171,10 +171,11 @@ export function renderBedGrid(beds) {
         const plotBeds = (grouped[plotId] || []).slice().sort(numSort);
         const { total, flagged } = plotWateringRollup(plotId);
         const waterBadge = flagged > 0 ? `<span style="color:#d97706;font-weight:700;">💧 ${flagged}/${total} unwatered</span>` : `<span>💧 All watered</span>`;
+        const safePlotId = escapeHtml(String(plotId));
 
         html += `
         <div class="bed-grid-plot-group">
-            <div class="bed-grid-plot-header" onclick="openPlotDetail('${escapeHtml(String(plotId))}')">
+            <div class="bed-grid-plot-header" data-plot="${safePlotId}" onclick="openPlotDetail('${safePlotId}')">
                 <p class="bed-grid-plot-title">🗂️ ${escapeHtml(plot ? plot.name : "Plot")} (${plotBeds.length} beds)</p>
                 <div class="bed-grid-plot-meta">${waterBadge} ›</div>
             </div>

@@ -1218,6 +1218,26 @@ export async function initApp() {
         });
     });
 
+    // Delegated click listeners for bed tiles and cards
+    document.getElementById("bedGridList")?.addEventListener("click", (e) => {
+        const header = e.target.closest(".bed-grid-plot-header");
+        if (header && header.dataset.plot) {
+            openPlotDetail(header.dataset.plot);
+            return;
+        }
+        const tile = e.target.closest(".bed-tile");
+        if (tile && tile.dataset.bed) {
+            openBedDetail(tile.dataset.bed);
+        }
+    });
+
+    document.getElementById("batchList")?.addEventListener("click", (e) => {
+        const card = e.target.closest(".bed-card");
+        if (card && card.dataset.bed && !e.target.closest("button")) {
+            openBedDetail(card.dataset.bed);
+        }
+    });
+
     // Backdrop clicks
     document.getElementById("modalOverlay")?.addEventListener("click", function (e) { if (e.target === this) closeModal(); });
     document.getElementById("bedDetailOverlay")?.addEventListener("click", function (e) { if (e.target === this) closeBedDetail(); });

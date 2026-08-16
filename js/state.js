@@ -118,13 +118,13 @@ export const state = {
     plotsData: [],
     selectedTaskFormulaId: null,
     selectedQuickFormulaId: null,
-    maxBedNumber: parseInt(localStorage.getItem(BED_MAX_KEY), 10) || 0,
+    maxBedNumber: (typeof localStorage !== "undefined" ? parseInt(localStorage.getItem(BED_MAX_KEY), 10) : 0) || 0,
     selectedBedForLog: null,
     addBedPending: false,
     activeLogFilter: "all",
     activeTypeFilter: "all",
     finPeriod: "week",
-    bedViewMode: localStorage.getItem("farmlog_view_mode") || "list",
+    bedViewMode: (typeof localStorage !== "undefined" ? localStorage.getItem("farmlog_view_mode") : "list") || "list",
     lastWeatherData: null,
     editingFormulaIndex: null,
     selectedCategoryColor: null,
@@ -277,18 +277,39 @@ export function resolveLogScopeLabel(log) {
 
 // Bed & Plot Finders
 export function getBed(bedNumber) {
-    const list = (typeof window !== "undefined" && window.bedsData) || state.bedsData;
-    return list.find(b => String(b.bedNumber) === String(bedNumber));
+    const list = (typeof window !== "undefined" && Array.isArray(window.bedsData) && window.bedsData.length) ? window.bedsData : state.bedsData;
+    let found = list.find(b => String(b.bedNumber) === String(bedNumber));
+    if (!found && typeof localStorage !== "undefined") {
+        try {
+            const cached = JSON.parse(localStorage.getItem(BEDS_CACHE_KEY) || "[]");
+            found = cached.find(b => String(b.bedNumber) === String(bedNumber));
+        } catch (e) {}
+    }
+    return found;
 }
 
 export function getPlot(plotId) {
-    const list = (typeof window !== "undefined" && window.plotsData) || state.plotsData;
-    return list.find(p => String(p.id) === String(plotId));
+    const list = (typeof window !== "undefined" && Array.isArray(window.plotsData) && window.plotsData.length) ? window.plotsData : state.plotsData;
+    let found = list.find(p => String(p.id) === String(plotId));
+    if (!found && typeof localStorage !== "undefined") {
+        try {
+            const cached = JSON.parse(localStorage.getItem(PLOTS_CACHE_KEY) || "[]");
+            found = cached.find(p => String(p.id) === String(plotId));
+        } catch (e) {}
+    }
+    return found;
 }
 
 export function bedsInPlot(plotId) {
-    const list = (typeof window !== "undefined" && window.bedsData) || state.bedsData;
-    return list.filter(b => String(b.plotId || "") === String(plotId));
+    const list = (typeof window !== "undefined" && Array.isArray(window.bedsData) && window.bedsData.length) ? window.bedsData : state.bedsData;
+    let members = list.filter(b => String(b.plotId || "") === String(plotId));
+    if (!members.length && typeof localStorage !== "undefined") {
+        try {
+            const cached = JSON.parse(localStorage.getItem(BEDS_CACHE_KEY) || "[]");
+            members = cached.filter(b => String(b.plotId || "") === String(plotId));
+        } catch (e) {}
+    }
+    return members;
 }
 
 export function saveBeds() {
