@@ -1062,9 +1062,9 @@ function addBed() {
     addBedPending = true;
     setTimeout(() => { addBedPending = false; }, 2000);
 
-    // Never reuse a number: take the max of visible beds and the highest
-    // number ever used (retired beds included, tracked in maxBedNumber).
-    const nextNum = Math.max(maxBedNumber, ...bedsData.map(b => Number(b.bedNumber)), 0) + 1;
+    // Calculate next bed number based on current active beds (starts at 1 if empty)
+    const activeNums = bedsData.map(b => Number(b.bedNumber)).filter(n => !isNaN(n) && n > 0);
+    const nextNum = activeNums.length ? Math.max(...activeNums) + 1 : 1;
     maxBedNumber = nextNum;
     localStorage.setItem(BED_MAX_KEY, String(maxBedNumber));
 
@@ -1127,9 +1127,9 @@ async function fetchBeds() {
                 .sort((a, b) => (b.harvestDate || "") > (a.harvestDate || "") ? 1 : -1)
         }));
 
-        // Track highest bed number to avoid reuse.
-        const maxFromFirestore = Math.max(...bedsData.map(b => Number(b.bedNumber)), 0);
-        maxBedNumber = Math.max(maxBedNumber, maxFromFirestore);
+        // Track highest bed number based on active beds
+        const activeNums = bedsData.map(b => Number(b.bedNumber)).filter(n => !isNaN(n) && n > 0);
+        maxBedNumber = activeNums.length ? Math.max(...activeNums) : 0;
         localStorage.setItem(BED_MAX_KEY, String(maxBedNumber));
 
         localStorage.setItem(BEDS_CACHE_KEY, JSON.stringify(bedsData));
