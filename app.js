@@ -27,21 +27,28 @@ const firebaseConfig = {
 };
 
 let db = null;
-try {
+function getDb() {
+    if (db) return db;
     if (typeof firebase !== "undefined") {
-        if (!firebase.apps || !firebase.apps.length) {
-            firebase.initializeApp(firebaseConfig);
+        try {
+            if (!firebase.apps || !firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            db = firebase.firestore();
+            db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+                console.warn('Firestore persistence note:', err.code);
+            });
+            return db;
+        } catch (e) {
+            console.error("Firebase initialization failed:", e);
+            return null;
         }
-        db = firebase.firestore();
-        db.enablePersistence({ synchronizeTabs: true }).catch(err => {
-            console.warn('Firestore persistence note:', err.code);
-        });
     } else {
         console.error("Firebase SDK not loaded on window.");
+        return null;
     }
-} catch (e) {
-    console.error("Firebase initialization failed:", e);
 }
+getDb();
 
 
 // Kudat, Sabah — hardcoded since this is a single-farm app.

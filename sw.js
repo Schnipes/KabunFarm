@@ -5,7 +5,9 @@ const urlsToCache = [
   './index.html',
   './style.css',
   './app.js',
-  './manifest.json'
+  './manifest.json',
+  './scripts/firebase-app-compat.js',
+  './scripts/firebase-firestore-compat.js'
 ];
 
 self.addEventListener('install', event => {
