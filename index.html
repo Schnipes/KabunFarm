@@ -207,6 +207,14 @@
       <span class="nav-icon" aria-hidden="true">🗓️</span>
       <span>Plan</span>
     </button>
+    <button type="button" class="nav-btn nav-btn-fab" onclick="openModal('water')" aria-label="Quick Log">
+      <span class="fab-icon" aria-hidden="true">⚡</span>
+      <span class="fab-label">Log</span>
+    </button>
+    <button class="nav-btn" data-view="formulas">
+      <span class="nav-icon" aria-hidden="true">🧪</span>
+      <span>Formulas</span>
+    </button>
     <button class="nav-btn" data-view="data">
       <span class="nav-icon" aria-hidden="true">📊</span>
       <span>Activity</span>
@@ -216,6 +224,7 @@
   <!-- Log Modal -->
   <div class="modal-overlay" id="modalOverlay">
     <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <h2 id="modalTitle">Log activity</h2>
         <button class="modal-close" onclick="closeModal()" aria-label="Close">✕</button>
@@ -223,8 +232,14 @@
 
       <form id="logForm" onsubmit="handleSubmit(event)" novalidate>
         <div class="form-field">
-          <label for="logDate">Date</label>
-          <input type="date" id="logDate" required>
+          <div class="field-label-row">
+            <label for="logDate">Date</label>
+            <div class="date-preset-pills" id="logDatePills">
+              <button type="button" class="date-pill-btn active" onclick="setDatePreset('logDate', 0, this)">Today</button>
+              <button type="button" class="date-pill-btn" onclick="setDatePreset('logDate', 1, this)">Yesterday</button>
+            </div>
+          </div>
+          <input type="date" id="logDate" required onchange="syncDatePresets('logDate')">
         </div>
 
         <div class="form-field">
@@ -240,11 +255,21 @@
 
         <div class="form-field">
           <label for="bedScope">Farm scope</label>
-          <select id="bedScope" required>
+          <select id="bedScope" required onchange="updateBedFields()">
             <option value="all">Whole Farm</option>
+            <option value="multi">Select Multiple Beds…</option>
             <optgroup label="Plots" id="plotScopeGroup"></optgroup>
             <optgroup label="Beds" id="bedScopeGroup"></optgroup>
           </select>
+        </div>
+
+        <!-- Multi-Bed Batch Checkbox Selector -->
+        <div class="form-field" id="multiBedField" hidden>
+          <div class="field-label-row">
+            <label>Select Beds</label>
+            <button type="button" class="date-pill-btn" style="padding:3px 8px;font-size:11px;" onclick="toggleSelectAllBeds(this)">Select all</button>
+          </div>
+          <div id="multiBedChecklist" class="harvest-crops-list"></div>
         </div>
 
         <!-- Context bar: shows current crops for selected bed -->
@@ -281,17 +306,18 @@
           <div class="formula-volume-col">
             <span class="formula-calc-label">Tank size</span>
             <div class="formula-volume-wrap">
-              <input type="number" id="logSprayerVol" value="16" min="1" max="100" step="1"
+              <input type="number" id="logSprayerVol" value="16" min="1" max="100" step="1" inputmode="decimal"
                      oninput="document.getElementById('globalSprayerVol').value = this.value; updateSprayerTotalDisplay(); onSprayerParamChange();">
               <span class="formula-volume-unit">L</span>
             </div>
           </div>
           <div class="formula-volume-col">
             <span class="formula-calc-label">Tanks</span>
-            <div class="formula-volume-wrap">
-              <input type="number" id="logTankCount" value="1" min="1" max="50" step="1"
+            <div class="formula-volume-wrap stepper-volume-wrap">
+              <button type="button" class="stepper-btn" onclick="stepTankCount(-1)" aria-label="Decrease tanks">−</button>
+              <input type="number" id="logTankCount" value="1" min="1" max="50" step="1" inputmode="numeric"
                      oninput="updateSprayerTotalDisplay(); onSprayerParamChange();">
-              <span class="formula-volume-unit">tanks</span>
+              <button type="button" class="stepper-btn" onclick="stepTankCount(1)" aria-label="Increase tanks">＋</button>
             </div>
           </div>
           <div class="formula-volume-total" id="logSprayerTotalDisplay">
@@ -331,6 +357,7 @@
   <!-- Bed Detail Sheet -->
   <div class="modal-overlay" id="bedDetailOverlay">
     <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <div class="bed-detail-title-wrap">
           <h2 id="bedDetailTitle">Bed</h2>
@@ -371,6 +398,7 @@
   <!-- Sale Modal -->
   <div class="modal-overlay" id="saleModalOverlay">
     <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <h2>Log Sale</h2>
         <button class="modal-close" onclick="closeSaleModal()" aria-label="Close">✕</button>
@@ -378,8 +406,14 @@
       <form id="saleForm" onsubmit="handleSaleSubmit(event)" novalidate>
 
         <div class="form-field">
-          <label for="saleDate">Date</label>
-          <input type="date" id="saleDate" required>
+          <div class="field-label-row">
+            <label for="saleDate">Date</label>
+            <div class="date-preset-pills" id="saleDatePills">
+              <button type="button" class="date-pill-btn active" onclick="setDatePreset('saleDate', 0, this)">Today</button>
+              <button type="button" class="date-pill-btn" onclick="setDatePreset('saleDate', 1, this)">Yesterday</button>
+            </div>
+          </div>
+          <input type="date" id="saleDate" required onchange="syncDatePresets('saleDate')">
         </div>
 
         <div class="form-field">
@@ -417,6 +451,7 @@
   <!-- Add Task Modal -->
   <div class="modal-overlay" id="taskModalOverlay">
     <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <h2>Add Task</h2>
         <button class="modal-close" onclick="closeTaskModal()" aria-label="Close">✕</button>
@@ -424,8 +459,14 @@
       <form id="taskForm" onsubmit="handleTaskSubmit(event)" novalidate>
 
         <div class="form-field">
-          <label for="taskDate">Date</label>
-          <input type="date" id="taskDate" required>
+          <div class="field-label-row">
+            <label for="taskDate">Date</label>
+            <div class="date-preset-pills" id="taskDatePills">
+              <button type="button" class="date-pill-btn active" onclick="setDatePreset('taskDate', 0, this)">Today</button>
+              <button type="button" class="date-pill-btn" onclick="setDatePreset('taskDate', 1, this)">Yesterday</button>
+            </div>
+          </div>
+          <input type="date" id="taskDate" required onchange="syncDatePresets('taskDate')">
         </div>
 
         <div class="form-field">
@@ -481,6 +522,7 @@
   <!-- Plot Create/Edit + Bulk Bed-Assignment Modal -->
   <div class="modal-overlay" id="plotModalOverlay">
     <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <h2 id="plotModalTitle">New Plot</h2>
         <button class="modal-close" onclick="closePlotAssignModal()" aria-label="Close">✕</button>
@@ -502,6 +544,7 @@
   <!-- Plot Detail Sheet (view member beds, tap through, edit/delete plot) -->
   <div class="modal-overlay" id="plotDetailOverlay">
     <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <h2 id="plotDetailTitle">Plot</h2>
         <button class="modal-close" onclick="closePlotDetail()" aria-label="Close">✕</button>
@@ -531,6 +574,7 @@
   <!-- Formula Edit/Add Modal -->
   <div class="modal-overlay" id="formulaModalOverlay">
     <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
         <h2 id="formulaModalTitle">Add Formula</h2>
         <button class="modal-close" onclick="closeFormulaModal()" aria-label="Close">✕</button>
@@ -564,6 +608,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script src="app.js?v=2"></script>
+  <script type="module" src="js/app.js"></script>
 </body>
 </html>

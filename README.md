@@ -68,17 +68,16 @@ An offline-first Progressive Web App for managing and logging daily activity on 
 
 ## Testing
 
-`test.html` is a zero-dependency regression suite — open it directly in a browser, no build step, no npm. It mocks `fetch`/`prompt` before the app loads and isolates `localStorage`, so it never touches real farm data. Covers the pure logic functions: date normalization, watering-alert decisions, crop P&L math, the dosage calculator, plot membership, and more. Run it after any change to `app.js`'s logic.
+`test.html` is a zero-dependency regression suite — open it directly in a browser, no build step, no npm. It mocks `fetch`/`prompt` before the app loads and isolates `localStorage`, so it never touches real farm data. Covers the pure logic functions: date normalization, watering-alert decisions, crop P&L math, the dosage calculator, plot membership, and more. Run it after any change to logic in `js/`.
 
 ---
 
 ## Stack
 
-- Vanilla JS + CSS — no framework, no build step
+- Vanilla JS (Native ES Modules) + CSS — no framework, no build step
 - Service Worker (cache-first, offline queue)
-- localStorage for data cache and offline queue
-- Google Apps Script as backend (doGet / doPost)
-- Google Sheets as database
+- IndexedDB & Firestore persistence with localStorage fallback
+- Firebase Cloud Firestore backend
 
 ---
 

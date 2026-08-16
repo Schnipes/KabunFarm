@@ -66,6 +66,36 @@
   <div class="status-badge"></div>
   <select id="activityCategory"></select>
   <select id="bedScope"></select>
+  <input type="date" id="logDate">
+  <div id="logDatePills"><button type="button" class="date-pill-btn">Today</button><button type="button" class="date-pill-btn">Yesterday</button></div>
+  <input type="date" id="saleDate">
+  <div id="saleDatePills"><button type="button" class="date-pill-btn">Today</button><button type="button" class="date-pill-btn">Yesterday</button></div>
+  <input type="date" id="taskDate">
+  <div id="taskDatePills"><button type="button" class="date-pill-btn">Today</button><button type="button" class="date-pill-btn">Yesterday</button></div>
+  <form id="logForm"></form>
+  <form id="saleForm"></form>
+  <form id="taskForm"></form>
+  <div id="modalTitle"></div>
+  <div id="currentCropsField"></div>
+  <div id="harvestCropsField"></div>
+  <div id="harvestWeightField"></div>
+  <div id="newCropField"></div>
+  <div id="bedContextBar"></div>
+  <div id="quickFormulaSection"></div>
+  <div id="quickFormulaDoseCard"></div>
+  <div id="inputsField"></div>
+  <div id="financialsField"></div>
+  <div id="toggleInputsBtn"></div>
+  <div id="toggleFinancialsBtn"></div>
+  <input id="newCropName">
+  <input id="saleCrop">
+  <input id="saleQty">
+  <select id="saleUnit"></select>
+  <input id="salePricePerUnit">
+  <div id="saleTotalDisplay"></div>
+  <input id="taskNote">
+  <input type="checkbox" id="taskRepeat">
+  <select id="taskActivityCategory"></select>
   <main></main>
 </div>
 
@@ -84,9 +114,24 @@
 </script>
 <script src="https://www.gstatic.com/firebasejs/10.15.0/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.15.0/firebase-firestore-compat.js"></script>
-<script>document.write('<script src="app.js?cb=' + Date.now() + '"><\/script>');</script>
-<script>
-(function () {
+<script type="module">
+  import * as State from "./js/state.js";
+  import * as Calc from "./js/calculations.js";
+  import * as Db from "./js/db.js";
+  import * as Views from "./js/views.js";
+  import * as App from "./js/app.js";
+
+  // Re-expose to local test scope
+  const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS } = State;
+  const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal } = Calc;
+  const { planDayLabel } = Views;
+  const { setDatePreset, syncDatePresets, addBed, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
+
+  // Sync window proxies with local test scope
+  let bedsData = State.state.bedsData;
+  let plotsData = State.state.plotsData;
+  let formulasData = State.state.formulasData;
+
   const groups = [];
   let current = null;
 
@@ -604,6 +649,54 @@
   });
 
   // ---------------------------------------------------------------------
+  group("1-Tap Date Preset Chips & Sync");
+
+  test("setDatePreset sets input value to today (offset 0)", () => {
+    const btn = document.querySelector("#logDatePills .date-pill-btn");
+    setDatePreset("logDate", 0, btn);
+    assertEqual(document.getElementById("logDate").value, todayString());
+    assertTrue(btn.classList.contains("active"));
+  });
+
+  test("setDatePreset sets input value to yesterday (offset 1)", () => {
+    const btns = document.querySelectorAll("#logDatePills .date-pill-btn");
+    const yestBtn = btns[1];
+    setDatePreset("logDate", 1, yestBtn);
+    const d = new Date(); d.setDate(d.getDate() - 1);
+    assertEqual(document.getElementById("logDate").value, localDateStr(d));
+    assertTrue(yestBtn.classList.contains("active"));
+  });
+
+  test("syncDatePresets reflects custom date changes by clearing active pills", () => {
+    const input = document.getElementById("logDate");
+    input.value = "2026-01-01";
+    syncDatePresets("logDate");
+    const btns = document.querySelectorAll("#logDatePills .date-pill-btn");
+    btns.forEach(b => assertTrue(!b.classList.contains("active")));
+  });
+
+  // ---------------------------------------------------------------------
+  group("Tier 2 Wet-Finger Stepper & Keypad Controls");
+
+  test("stepTankCount increments tank count correctly", () => {
+    const input = document.getElementById("logTankCount");
+    input.value = "1";
+    stepTankCount(1);
+    assertEqual(input.value, "2");
+    stepTankCount(2);
+    assertEqual(input.value, "4");
+  });
+
+  test("stepTankCount decrements tank count with lower bound at 1", () => {
+    const input = document.getElementById("logTankCount");
+    input.value = "2";
+    stepTankCount(-1);
+    assertEqual(input.value, "1");
+    stepTankCount(-1);
+    assertEqual(input.value, "1", "tank count should not drop below 1");
+  });
+
+  // ---------------------------------------------------------------------
   // Render results
   let total = 0, failed = 0;
   const resultsEl = document.getElementById("results");
@@ -636,7 +729,6 @@
   ["offline_farm_logs", "farmlog_beds_cache", "farmlog_formulas_cache",
    "farmlog_logs_cache", "farmlog_sales_cache", "farmlog_tasks_cache"
   ].forEach(k => localStorage.removeItem(k));
-})();
 </script>
 </body>
 </html>

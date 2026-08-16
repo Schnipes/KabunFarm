@@ -4,7 +4,11 @@ const urlsToCache = [
   './',
   './index.html',
   './style.css',
-  './app.js',
+  './js/state.js',
+  './js/calculations.js',
+  './js/db.js',
+  './js/views.js',
+  './js/app.js',
   './manifest.json',
   './scripts/firebase-app-compat.js',
   './scripts/firebase-firestore-compat.js'
