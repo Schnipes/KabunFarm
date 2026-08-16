@@ -69,7 +69,13 @@
       <!-- Beds first — primary content -->
       <section aria-label="Active beds">
         <div class="section-header">
-          <p class="section-label">Active beds</p>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <p class="section-label" style="margin:0;">Active beds</p>
+            <div class="view-mode-toggle">
+              <button type="button" id="btnViewList" class="mode-btn active" onclick="setBedViewMode('list')" aria-label="List View">☰</button>
+              <button type="button" id="btnViewGrid" class="mode-btn" onclick="setBedViewMode('grid')" aria-label="Grid View">☷</button>
+            </div>
+          </div>
           <div style="display:flex;gap:8px;">
             <button class="add-bed-btn" onclick="openPlotAssignModal()">+ Plot</button>
             <button class="add-bed-btn" onclick="addBed()">+ Add Bed</button>
@@ -78,6 +84,7 @@
         <div id="batchList">
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading beds...</p>
         </div>
+        <div id="bedGridList" class="bed-grid-wrap" hidden></div>
       </section>
 
       <!-- Quick log — secondary, for whole-farm or fast access -->
@@ -264,41 +271,49 @@
           <datalist id="cropNameList"></datalist>
         </div>
 
-        <!-- Collapsible extras -->
+        <!-- Direct Quick Formula Chips (Zero Accordion) -->
+        <div class="form-field" id="quickFormulaSection" hidden>
+          <label>Recipe Formula <span class="hint">tap to auto-calculate mix</span></label>
+          <div id="quickFormulaChips" class="quick-formula-chips"></div>
+        </div>
+
+        <div class="formula-volume-global formula-volume-compound" id="logSprayerVolRow" hidden>
+          <div class="formula-volume-col">
+            <span class="formula-calc-label">Tank size</span>
+            <div class="formula-volume-wrap">
+              <input type="number" id="logSprayerVol" value="16" min="1" max="100" step="1"
+                     oninput="document.getElementById('globalSprayerVol').value = this.value; updateSprayerTotalDisplay(); onSprayerParamChange();">
+              <span class="formula-volume-unit">L</span>
+            </div>
+          </div>
+          <div class="formula-volume-col">
+            <span class="formula-calc-label">Tanks</span>
+            <div class="formula-volume-wrap">
+              <input type="number" id="logTankCount" value="1" min="1" max="50" step="1"
+                     oninput="updateSprayerTotalDisplay(); onSprayerParamChange();">
+              <span class="formula-volume-unit">tanks</span>
+            </div>
+          </div>
+          <div class="formula-volume-total" id="logSprayerTotalDisplay">
+            Total mix: <strong>16 L</strong>
+          </div>
+        </div>
+
+        <!-- Calculated ingredients preview card -->
+        <div id="quickFormulaDoseCard" class="quick-dose-card" hidden></div>
+
+        <!-- Collapsible extras for notes/cost -->
         <div class="form-extras-toggles">
-          <button type="button" class="extras-toggle" id="toggleInputsBtn" onclick="toggleInputs()">＋ Add inputs / notes</button>
+          <button type="button" class="extras-toggle" id="toggleInputsBtn" onclick="toggleInputs()">＋ Extra notes</button>
           <button type="button" class="extras-toggle" id="toggleFinancialsBtn" onclick="toggleFinancials()">＋ Add cost</button>
         </div>
 
         <div class="form-field" id="inputsField" hidden>
           <label for="inputsUsed">
-            Inputs used
-            <span class="hint" id="inputsHint">e.g. Master Mix, LAB serum, BSF compost</span>
+            Activity Notes / Inputs
+            <span class="hint" id="inputsHint">Optional custom observations or additional inputs</span>
           </label>
-          <div class="formula-volume-global formula-volume-compound" id="logSprayerVolRow" hidden>
-            <div class="formula-volume-col">
-              <span class="formula-calc-label">Tank size</span>
-              <div class="formula-volume-wrap">
-                <input type="number" id="logSprayerVol" value="16" min="1" max="100" step="1"
-                       oninput="document.getElementById('globalSprayerVol').value = this.value; updateSprayerTotalDisplay();">
-                <span class="formula-volume-unit">L</span>
-              </div>
-            </div>
-            <div class="formula-volume-col">
-              <span class="formula-calc-label">Tanks</span>
-              <div class="formula-volume-wrap">
-                <input type="number" id="logTankCount" value="1" min="1" max="50" step="1"
-                       oninput="updateSprayerTotalDisplay();">
-                <span class="formula-volume-unit">tanks</span>
-              </div>
-            </div>
-            <div class="formula-volume-total" id="logSprayerTotalDisplay">
-              Total mix: <strong>16 L</strong>
-            </div>
-          </div>
-          <button type="button" class="formula-pick-btn" onclick="toggleFormulaPicker()">🧪 Pick from formulas</button>
-          <div id="formulaPickerList" class="formula-picker-list" hidden></div>
-          <textarea id="inputsUsed" placeholder="List inputs used for this activity" aria-describedby="inputsHint"></textarea>
+          <textarea id="inputsUsed" placeholder="Custom notes for this log" aria-describedby="inputsHint"></textarea>
         </div>
 
         <div class="form-field" id="financialsField" hidden>

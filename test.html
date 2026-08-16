@@ -589,6 +589,21 @@
   });
 
   // ---------------------------------------------------------------------
+  group("High-Density Bed Grid & Zero-Accordion Logic");
+
+  test("groupByPlot correctly splits 22 eggplant beds into plot group", () => {
+    plotsData = [{ id: "plot_eggplant", name: "Eggplant Plot" }];
+    const beds = [];
+    for (let i = 1; i <= 22; i++) {
+      beds.push({ bedNumber: i, plotId: "plot_eggplant", crops: [{ cropName: "Eggplant" }] });
+    }
+    const { grouped, solo } = groupByPlot(beds);
+    assertEqual(Object.keys(grouped).length, 1);
+    assertEqual(grouped["plot_eggplant"].length, 22);
+    assertEqual(solo.length, 0);
+  });
+
+  // ---------------------------------------------------------------------
   // Render results
   let total = 0, failed = 0;
   const resultsEl = document.getElementById("results");

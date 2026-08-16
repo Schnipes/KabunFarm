@@ -1730,3 +1730,248 @@ select.invalid,
 textarea.invalid {
   border-color: var(--color-danger);
 }
+
+/* ==========================================================================
+   Frictionless UX Enhancements: Grid View, Quick Formula Chips, 1-Tap Execution
+   ========================================================================== */
+
+/* ---------- View Mode Toggle (Grid vs List) ---------- */
+.view-mode-toggle {
+  display: flex;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 2px;
+}
+.view-mode-toggle .mode-btn {
+  background: none;
+  border: none;
+  padding: 3px 8px;
+  font-size: 13px;
+  color: #777;
+  border-radius: 6px;
+  cursor: pointer;
+  line-height: 1;
+}
+.view-mode-toggle .mode-btn.active {
+  background: var(--color-bg);
+  color: var(--color-primary-dark);
+  font-weight: 700;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+}
+
+/* ---------- High-Density Farm Bed Grid View ---------- */
+.bed-grid-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+.bed-grid-plot-group {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+}
+.bed-grid-plot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  cursor: pointer;
+}
+.bed-grid-plot-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0;
+}
+.bed-grid-plot-meta {
+  font-size: 11.5px;
+  color: #777;
+}
+.bed-grid-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 6px;
+}
+.bed-tile {
+  background: var(--color-bg);
+  border: 1.5px solid var(--color-border);
+  border-radius: 10px;
+  padding: 6px 4px;
+  text-align: center;
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s, background 0.15s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+}
+.bed-tile:active {
+  transform: scale(0.96);
+}
+.bed-tile.needs-water {
+  border-color: #f59e0b;
+  background: #fffbeb;
+}
+.bed-tile.is-empty {
+  border-style: dashed;
+  opacity: 0.7;
+}
+.bed-tile-num {
+  font-size: 13px;
+  font-weight: 800;
+  color: var(--color-text);
+  line-height: 1.1;
+}
+.bed-tile-crop {
+  font-size: 10px;
+  color: #555;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 58px;
+  margin-top: 2px;
+}
+.bed-tile-status {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 9.5px;
+  color: #666;
+  margin-top: 3px;
+}
+.bed-tile-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--color-primary);
+}
+.bed-tile-dot.warn {
+  background: #d97706;
+}
+
+/* ---------- Zero-Accordion Quick Formula Chips ---------- */
+.quick-formula-chips {
+  display: flex;
+  gap: 6px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+.quick-formula-chips::-webkit-scrollbar { display: none; }
+.quick-formula-chip {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text);
+  white-space: nowrap;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  font-family: inherit;
+}
+.quick-formula-chip:active {
+  transform: scale(0.96);
+}
+.quick-formula-chip.selected {
+  background: #e4f4e8;
+  border-color: var(--color-primary);
+  color: var(--color-primary-dark);
+  font-weight: 700;
+  box-shadow: 0 0 0 2px rgba(26, 143, 60, 0.15);
+}
+
+/* ---------- Calculated Dose Preview Card ---------- */
+.quick-dose-card {
+  background: #f4fbf6;
+  border: 1px solid #c3e6cb;
+  border-radius: 12px;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+}
+.quick-dose-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-primary-dark);
+  margin: 0 0 6px;
+}
+.quick-dose-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.quick-dose-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 12.5px;
+  color: #333;
+}
+.quick-dose-amount {
+  font-weight: 700;
+  color: var(--color-primary-dark);
+}
+
+/* ---------- 1-Tap Task Execution Button ---------- */
+.task-exec-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #1a8f3c;
+  color: #ffffff;
+  border: none;
+  border-radius: 999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 8px;
+  transition: background 0.15s, transform 0.1s;
+}
+.task-exec-btn:active {
+  background: #146b2d;
+  transform: scale(0.96);
+}
+.task-row-exec {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  background: #e4f4e8;
+  color: var(--color-primary-dark);
+  border: 1px solid #b9e2c2;
+  border-radius: 999px;
+  padding: 3px 9px;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.task-row-exec:active {
+  background: #c7ebd0;
+}
+
+/* ---------- Formula Card Direct Action ---------- */
+.formula-apply-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #e4f4e8;
+  color: var(--color-primary-dark);
+  border: 1px solid #b9e2c2;
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  margin-top: 10px;
+  width: 100%;
+  justify-content: center;
+}
+.formula-apply-btn:active {
+  background: #c7ebd0;
+}

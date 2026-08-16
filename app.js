@@ -283,7 +283,10 @@ function openModal(type) {
     if (document.getElementById("logTankCount")) {
         document.getElementById("logTankCount").value = 1;
     }
+    selectedQuickFormulaId = null;
     updateSprayerTotalDisplay();
+    renderQuickFormulaChips();
+    updateQuickFormulaDosePreview();
     document.getElementById("modalOverlay").classList.add("open");
     document.body.style.overflow = "hidden";
 }
@@ -292,19 +295,21 @@ function closeModal() {
     document.getElementById("modalOverlay").classList.remove("open");
     document.body.style.overflow = "";
     document.getElementById("logForm").reset();
+    selectedQuickFormulaId = null;
     document.getElementById("currentCropsField").hidden  = true;
     document.getElementById("harvestCropsField").hidden  = true;
     document.getElementById("harvestWeightField").hidden = true;
     document.getElementById("newCropField").hidden       = true;
     document.getElementById("bedContextBar").hidden      = true;
+    document.getElementById("quickFormulaSection").hidden = true;
+    document.getElementById("quickFormulaDoseCard").hidden = true;
     document.getElementById("inputsField").hidden        = true;
     document.getElementById("financialsField").hidden    = true;
-    document.getElementById("toggleInputsBtn").textContent     = "＋ Add inputs / notes";
+    document.getElementById("toggleInputsBtn").textContent     = "＋ Extra notes";
     document.getElementById("toggleFinancialsBtn").textContent = "＋ Add cost";
     document.getElementById("logDate").classList.remove("invalid");
     document.getElementById("activityCategory").classList.remove("invalid");
     document.getElementById("newCropName").classList.remove("invalid");
-    document.getElementById("formulaPickerList").hidden = true;
 }
 
 document.getElementById("modalOverlay").addEventListener("click", function (e) {
@@ -372,12 +377,19 @@ function updateBedFields() {
     document.getElementById("newCropField").hidden       = true;
     document.getElementById("newCropName").required      = false;
 
-    // Sprayer volume only matters for spray-based activities — mirror the
-    // global input here so it can be adjusted without leaving the log form.
+    // Sprayer volume and quick formula chips only matter for spray-based activities
     const sprayVolRow = document.getElementById("logSprayerVolRow");
-    sprayVolRow.hidden = !(activity === "pest_control" || activity === "watering");
-    if (!sprayVolRow.hidden) {
+    const quickFormSec = document.getElementById("quickFormulaSection");
+    const isSpray = (activity === "pest_control" || activity === "watering");
+    if (sprayVolRow) sprayVolRow.hidden = !isSpray;
+    if (quickFormSec) {
+        quickFormSec.hidden = !isSpray;
+        if (isSpray) renderQuickFormulaChips();
+    }
+    if (!sprayVolRow?.hidden) {
         document.getElementById("logSprayerVol").value = document.getElementById("globalSprayerVol").value;
+        updateSprayerTotalDisplay();
+        updateQuickFormulaDosePreview();
     }
 
     // Update bed context bar
@@ -858,18 +870,112 @@ function renderPlotCard(plotId, beds) {
     </div>`;
 }
 
-function renderBeds(beds) {
-    const container = document.getElementById("batchList");
+let bedViewMode = localStorage.getItem("farmlog_view_mode") || "list";
+
+function setBedViewMode(mode) {
+    bedViewMode = mode;
+    localStorage.setItem("farmlog_view_mode", mode);
+    document.getElementById("btnViewList")?.classList.toggle("active", mode === "list");
+    document.getElementById("btnViewGrid")?.classList.toggle("active", mode === "grid");
+    const listEl = document.getElementById("batchList");
+    const gridEl = document.getElementById("bedGridList");
+    if (listEl) listEl.hidden = (mode === "grid");
+    if (gridEl) gridEl.hidden = (mode !== "grid");
+    renderBeds(bedsData);
+}
+
+function renderBedTile(bed) {
+    const isGrowing = bed.crops && bed.crops.length > 0;
+    const waterStatus = getWateringStatus(bed);
+    const crop = isGrowing ? bed.crops[0] : null;
+    const cropName = crop ? crop.cropName : "Empty";
+    const dayCount = crop ? `D${daysSince(crop.plantingDate)}` : "Ready";
+    const warnWater = waterStatus.needsWater;
+
+    return `
+    <div class="bed-tile${warnWater ? " needs-water" : ""}${!isGrowing ? " is-empty" : ""}" onclick="openBedDetail(${bed.bedNumber})">
+        <span class="bed-tile-num">${bed.bedNumber}</span>
+        <span class="bed-tile-crop">${escapeHtml(cropName)}</span>
+        <div class="bed-tile-status">
+            <span class="bed-tile-dot${warnWater ? " warn" : ""}"></span>
+            <span>${dayCount}</span>
+        </div>
+    </div>`;
+}
+
+function renderBedGrid(beds) {
+    const gridContainer = document.getElementById("bedGridList");
+    if (!gridContainer) return;
     if (!beds.length) {
-        container.innerHTML = `
-        <div class="empty-beds-card" onclick="addBed()">
-            <span class="empty-beds-icon">🌱</span>
-            <p class="empty-beds-title">Add your first bed</p>
-            <p class="empty-beds-hint">Tap to create Bed 1</p>
-        </div>`;
+        gridContainer.innerHTML = '<p style="color:#888;font-size:13px;padding:8px 4px;">No beds created yet.</p>';
         return;
     }
 
+    const { grouped, solo } = groupByPlot(beds);
+    let html = "";
+
+    // Plot groups
+    Object.keys(grouped).forEach(plotId => {
+        const plot = getPlot(plotId);
+        const plotBeds = grouped[plotId];
+        const { total, flagged } = plotWateringRollup(plotId);
+        const waterBadge = flagged > 0 ? `<span style="color:#d97706;font-weight:700;">💧 ${flagged}/${total} unwatered</span>` : `<span>💧 All watered</span>`;
+
+        html += `
+        <div class="bed-grid-plot-group">
+            <div class="bed-grid-plot-header" onclick="openPlotDetail('${escapeHtml(String(plotId))}')">
+                <p class="bed-grid-plot-title">🗂️ ${escapeHtml(plot ? plot.name : "Plot")} (${plotBeds.length} beds)</p>
+                <div class="bed-grid-plot-meta">${waterBadge} ›</div>
+            </div>
+            <div class="bed-grid-tiles">
+                ${plotBeds.map(renderBedTile).join("")}
+            </div>
+        </div>`;
+    });
+
+    // Standalone beds
+    if (solo.length) {
+        html += `
+        <div class="bed-grid-plot-group">
+            <div class="bed-grid-plot-header">
+                <p class="bed-grid-plot-title">Standalone Beds (${solo.length})</p>
+            </div>
+            <div class="bed-grid-tiles">
+                ${solo.map(renderBedTile).join("")}
+            </div>
+        </div>`;
+    }
+
+    gridContainer.innerHTML = html;
+}
+
+function renderBeds(beds) {
+    const listContainer = document.getElementById("batchList");
+    const gridContainer = document.getElementById("bedGridList");
+
+    if (listContainer) listContainer.hidden = (bedViewMode === "grid");
+    if (gridContainer) gridContainer.hidden = (bedViewMode !== "grid");
+    document.getElementById("btnViewList")?.classList.toggle("active", bedViewMode === "list");
+    document.getElementById("btnViewGrid")?.classList.toggle("active", bedViewMode === "grid");
+
+    if (!beds.length) {
+        if (listContainer) {
+            listContainer.innerHTML = `
+            <div class="empty-beds-card" onclick="addBed()">
+                <span class="empty-beds-icon">🌱</span>
+                <p class="empty-beds-title">Add your first bed</p>
+                <p class="empty-beds-hint">Tap to create Bed 1</p>
+            </div>`;
+        }
+        if (gridContainer) gridContainer.innerHTML = '<p style="color:#888;font-size:13px;padding:8px 4px;">No beds created yet.</p>';
+        return;
+    }
+
+    // 1. Render Grid
+    renderBedGrid(beds);
+
+    // 2. Render List
+    if (!listContainer) return;
     const growing = beds.filter(b => b.crops.length > 0);
     const empty   = beds.filter(b => b.crops.length === 0);
     let html = "";
@@ -888,7 +994,7 @@ function renderBeds(beds) {
         html += solo.map(renderEmptyBedCard).join("");
     }
 
-    container.innerHTML = html;
+    listContainer.innerHTML = html;
 }
 
 function openBedDetail(bedNum) {
@@ -1463,8 +1569,22 @@ function renderFormulas(formulas) {
             </div>
             ${f.description ? `<p class="formula-desc">${escapeHtml(f.description)}</p>` : ""}
             ${calcSection}
+            <button type="button" class="formula-apply-btn" onclick="applyFormulaFromLibrary(${i})">
+                ⚡ Apply to Bed / Plot
+            </button>
         </div>`;
     }).join("");
+}
+
+function applyFormulaFromLibrary(index) {
+    const formula = formulasData[index];
+    if (!formula) return;
+    switchView("home");
+    openModal("pest");
+    selectedQuickFormulaId = formula.id;
+    updateBedFields();
+    renderQuickFormulaChips();
+    updateQuickFormulaDosePreview();
 }
 
 async function fetchFormulas() {
@@ -1810,24 +1930,88 @@ async function fetchLogs() {
     }
 }
 
-// --- 12. Formula Picker ---
-function toggleFormulaPicker() {
-    const list = document.getElementById("formulaPickerList");
-    if (!list.hidden) { list.hidden = true; return; }
+// --- 12. Zero-Accordion Quick Formula Chips & Calculator ---
+let selectedQuickFormulaId = null;
 
+function renderQuickFormulaChips() {
+    const container = document.getElementById("quickFormulaChips");
+    if (!container) return;
     if (!formulasData.length) {
-        list.innerHTML = '<p style="color:#888;font-size:13px;padding:6px 0;">No formulas loaded.</p>';
-        list.hidden = false;
+        container.innerHTML = '<span style="color:#888;font-size:12px;">No formulas available</span>';
+        return;
+    }
+    container.innerHTML = formulasData.map(f => {
+        const isSel = String(selectedQuickFormulaId) === String(f.id);
+        return `
+        <button type="button" class="quick-formula-chip${isSel ? " selected" : ""}" onclick="selectQuickFormula('${escapeHtml(String(f.id))}')">
+            ${escapeHtml(f.name)}
+        </button>`;
+    }).join("");
+}
+
+function selectQuickFormula(formulaId) {
+    if (String(selectedQuickFormulaId) === String(formulaId)) {
+        selectedQuickFormulaId = null;
+    } else {
+        selectedQuickFormulaId = formulaId;
+    }
+    renderQuickFormulaChips();
+    updateQuickFormulaDosePreview();
+}
+
+function onSprayerParamChange() {
+    updateSprayerTotalDisplay();
+    updateQuickFormulaDosePreview();
+}
+
+function updateQuickFormulaDosePreview() {
+    const card = document.getElementById("quickFormulaDoseCard");
+    const inputsUsed = document.getElementById("inputsUsed");
+    if (!selectedQuickFormulaId) {
+        if (card) card.hidden = true;
+        return;
+    }
+    const formula = formulasData.find(f => String(f.id) === String(selectedQuickFormulaId));
+    if (!formula) {
+        if (card) card.hidden = true;
         return;
     }
 
-    list.innerHTML = formulasData.map((f, i) => `
-        <button type="button" class="formula-pick-item" onclick="applyFormula(${i})">
-            <span class="formula-pick-name">${escapeHtml(f.name)}</span>
-            ${f.category ? `<span class="formula-pick-cat">${escapeHtml(f.category)}</span>` : ""}
-        </button>`
-    ).join("");
-    list.hidden = false;
+    const ingredients = parseRecipe(formula.recipe);
+    const tankSize  = parseFloat(document.getElementById("logSprayerVol")?.value) || 16;
+    const tankCount = parseFloat(document.getElementById("logTankCount")?.value) || 1;
+    const totalVol  = tankSize * tankCount;
+
+    if (ingredients && card) {
+        const rowsHtml = ingredients.map(ing => {
+            const total = ing.amount * totalVol;
+            const calc = ing.unit === 'g'
+                ? total.toFixed(1).replace(/\.0$/, '')
+                : (Number.isInteger(total) ? String(total) : total.toFixed(1).replace(/\.0$/, ''));
+            return `
+            <div class="quick-dose-row">
+                <span>${escapeHtml(ing.name)}</span>
+                <span class="quick-dose-amount">${calc} ${ing.unit}</span>
+            </div>`;
+        }).join("");
+
+        card.innerHTML = `
+            <p class="quick-dose-title">🧪 ${escapeHtml(formula.name)} (${totalVol}L mix)</p>
+            <div class="quick-dose-list">${rowsHtml}</div>`;
+        card.hidden = false;
+
+        const formulaParts = ingredients.map(ing => {
+            const total = ing.amount * totalVol;
+            const calc = ing.unit === 'g'
+                ? total.toFixed(1).replace(/\.0$/, '')
+                : (Number.isInteger(total) ? String(total) : total.toFixed(1).replace(/\.0$/, ''));
+            return `${ing.name}: ${calc}${ing.unit}`;
+        });
+        const summaryText = tankCount > 1
+            ? `${formula.name} (${tankCount} tanks × ${tankSize}L = ${totalVol}L)\n${formulaParts.join(", ")}`
+            : `${formula.name} (${totalVol}L sprayer)\n${formulaParts.join(", ")}`;
+        if (inputsUsed) inputsUsed.value = summaryText;
+    }
 }
 
 function updateSprayerTotalDisplay() {
@@ -2291,6 +2475,10 @@ function renderTaskCard(task) {
     const desc = descParts.join(" — ");
     const scopeMeta = resolveTaskScopeMeta(task);
     const bedLine = `<p class="task-bed">${escapeHtml(scopeMeta)}</p>`;
+    const execBtn = !isDone ? `
+        <button type="button" class="task-exec-btn" onclick="executeTaskNow('${escapeHtml(String(task.id))}', event)">
+            ⚡ Log &amp; Mark Done
+        </button>` : "";
 
     return `
     <div class="task-card">
@@ -2300,8 +2488,108 @@ function renderTaskCard(task) {
             <p class="task-title${isDone ? " done-text" : ""}">${escapeHtml(title)}</p>
             ${desc ? `<p class="task-desc">${escapeHtml(desc)}</p>` : ""}
             ${bedLine}
+            ${execBtn}
         </div>
     </div>`;
+}
+
+// --- 1-Tap Task Execution ---
+async function executeTaskNow(taskId, event) {
+    if (event) event.stopPropagation();
+    const task = tasksData.find(t => String(t.id) === String(taskId));
+    if (!task) return;
+
+    const formula = task.formulaId ? formulasData.find(f => String(f.id) === String(task.formulaId)) : null;
+    const activity = task.activityCategory || (formula ? "pest_control" : "watering");
+    const date = todayString();
+    const scope = task.bedNumber || "all";
+    const logId = "log_" + Date.now();
+
+    let inputsUsed = task.note || "";
+    if (formula) {
+        const ingredients = parseRecipe(formula.recipe);
+        if (ingredients) {
+            const parts = ingredients.map(ing => {
+                const total = ing.amount * 16;
+                const calc = ing.unit === 'g' ? total.toFixed(1).replace(/\.0$/, '') : (Number.isInteger(total) ? String(total) : total.toFixed(1).replace(/\.0$/, ''));
+                return `${ing.name}: ${calc}${ing.unit}`;
+            });
+            inputsUsed = `${formula.name} — 16L sprayer\n${parts.join(", ")}` + (task.note ? `\n${task.note}` : "");
+        } else {
+            inputsUsed = formula.name + (task.note ? ` — ${task.note}` : "");
+        }
+    }
+
+    const logEntry = {
+        id: logId,
+        date,
+        activityCategory: activity,
+        bedNumber: scope,
+        cropName: (() => {
+            if (scope === "all") return "";
+            if (String(scope).startsWith("plot_")) {
+                const names = new Set();
+                bedsInPlot(scope).forEach(b => b.crops.forEach(c => names.add(c.cropName)));
+                return [...names].join(", ");
+            }
+            const bed = getBed(scope);
+            return bed && bed.crops.length ? bed.crops.map(c => c.cropName).join(", ") : "";
+        })(),
+        inputsUsed,
+        costRM: "",
+        revenueRM: "",
+        weight: "",
+        status: "active"
+    };
+
+    // 1. Optimistic log insert
+    const cachedLogs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+    cachedLogs.unshift(logEntry);
+    localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(cachedLogs));
+
+    // 2. Mark task as done
+    task.status = "done";
+    localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(tasksData));
+    renderPlanView();
+    if (typeof renderTodayTasks === "function") renderTodayTasks();
+
+    // 3. Update bed status
+    if (String(scope).startsWith("plot_")) {
+        const members = bedsInPlot(scope);
+        members.forEach(b => {
+            b.lastActivity = { type: activity, date };
+            const bedUpdate = { lastActivity: { type: activity, date } };
+            if (activity === "watering") {
+                b.lastWatered = date;
+                bedUpdate.lastWatered = date;
+            }
+            if (db) db.collection("beds").doc(String(b.bedNumber)).update(bedUpdate).catch(e => console.error(e));
+        });
+        saveBeds();
+        renderBeds(bedsData);
+    } else if (scope !== "all") {
+        const bed = getBed(scope);
+        if (bed) {
+            bed.lastActivity = { type: activity, date };
+            const bedUpdate = { lastActivity: { type: activity, date } };
+            if (activity === "watering") {
+                bed.lastWatered = date;
+                bedUpdate.lastWatered = date;
+            }
+            saveBeds();
+            renderBeds(bedsData);
+            if (db) db.collection("beds").doc(String(scope)).update(bedUpdate).catch(e => console.error(e));
+        }
+    }
+
+    // 4. Cloud sync
+    if (db) {
+        db.collection("logs").doc(logId).set(logEntry).catch(e => console.error(e));
+        db.collection("tasks").doc(String(task.id)).update({ status: "done" }).catch(e => console.error(e));
+    }
+
+    const scopeLabel = resolveTaskScopeMeta(task);
+    showToast(`⚡ 1-Tap Logged: ${CATEGORY_LABEL[activity] || activity} · ${scopeLabel}`);
 }
 
 function renderPlanView() {
@@ -2366,6 +2654,10 @@ function renderTodayTaskRow(task) {
     const bedMeta = resolveTaskScopeMeta(task);
     const slotShort = task.timeSlot && task.timeSlot !== "Anytime" ? TIME_SLOT_SHORT[task.timeSlot] : "";
     const meta = slotShort ? `${bedMeta} · ${slotShort}` : bedMeta;
+    const execMini = !isDone ? `
+        <button type="button" class="task-row-exec" onclick="executeTaskNow('${escapeHtml(String(task.id))}', event)">
+            ⚡ Log
+        </button>` : "";
 
     return `
     <div class="task-row${isDone ? " is-done" : ""}" style="border-left-color:${color || "var(--color-border)"};">
@@ -2373,6 +2665,7 @@ function renderTodayTaskRow(task) {
         <span class="task-row-icon">${icon}</span>
         <span class="task-row-title${isDone ? " done-text" : ""}">${escapeHtml(title)}</span>
         <span class="task-row-meta">${escapeHtml(meta)}</span>
+        ${execMini}
     </div>`;
 }
 
