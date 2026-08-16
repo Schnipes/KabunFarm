@@ -1057,6 +1057,44 @@ document.getElementById("bedDetailOverlay").addEventListener("click", function(e
     if (e.target === this) closeBedDetail();
 });
 
+// Purge / reset all beds and plots to start clean from Bed 1
+async function purgeAllBedsAndPlots() {
+    if (!confirm("Are you sure you want to purge all beds and plots? This will reset all bed counters back to 0.")) return;
+    
+    // Clear Firestore beds, plots, and active batches
+    if (db) {
+        try {
+            const [bedsSnap, plotsSnap, batchesSnap] = await Promise.all([
+                db.collection("beds").get(),
+                db.collection("plots").get(),
+                db.collection("batches").get()
+            ]);
+            const batch = db.batch();
+            bedsSnap.docs.forEach(doc => batch.delete(doc.ref));
+            plotsSnap.docs.forEach(doc => batch.delete(doc.ref));
+            batchesSnap.docs.forEach(doc => batch.delete(doc.ref));
+            await batch.commit();
+        } catch (e) {
+            console.error("Purge Firestore failed:", e);
+        }
+    }
+
+    // Reset local memory & storage
+    bedsData = [];
+    plotsData = [];
+    maxBedNumber = 0;
+    localStorage.removeItem(BEDS_CACHE_KEY);
+    localStorage.removeItem(PLOTS_CACHE_KEY);
+    localStorage.removeItem(BED_MAX_KEY);
+    localStorage.removeItem(LAST_BED_KEY);
+
+    renderBeds(bedsData);
+    populateBedDropdown();
+    renderBedFilterChips();
+    showToast("All beds & plots purged! Ready to add Bed 1.");
+}
+window.purgeAllBedsAndPlots = purgeAllBedsAndPlots;
+
 function addBed() {
     if (addBedPending) return;
     addBedPending = true;
