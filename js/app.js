@@ -510,11 +510,15 @@ export function handleSubmit(event) {
 // --- 4. Bed Detail Modal ---
 export function openBedDetail(bedNum) {
     const bed = getBed(bedNum);
-    if (!bed) return;
+    if (!bed) {
+        console.warn("openBedDetail: Bed not found for", bedNum);
+        return;
+    }
 
     state.selectedBedForLog = bedNum;
     const bedLabel = bed.name ? `Bed ${bedNum} · ${bed.name}` : `Bed ${bedNum}`;
-    document.getElementById("bedDetailTitle").textContent = bedLabel;
+    const titleEl = document.getElementById("bedDetailTitle");
+    if (titleEl) titleEl.textContent = bedLabel;
 
     const content = document.getElementById("bedDetailContent");
     let html = "";
@@ -553,9 +557,12 @@ export function openBedDetail(bedNum) {
     if (content) content.innerHTML = html;
 
     const isEmpty = !bed.crops || !bed.crops.length;
-    document.querySelector(".bed-log-actions .water").hidden  = isEmpty;
-    document.querySelector(".bed-log-actions .pest").hidden   = isEmpty;
-    document.querySelector(".bed-log-actions .harvest").hidden = isEmpty;
+    const waterBtn = document.querySelector(".bed-log-actions .water");
+    if (waterBtn) waterBtn.hidden = isEmpty;
+    const pestBtn = document.querySelector(".bed-log-actions .pest");
+    if (pestBtn) pestBtn.hidden = isEmpty;
+    const harvestBtn = document.querySelector(".bed-log-actions .harvest");
+    if (harvestBtn) harvestBtn.hidden = isEmpty;
 
     document.getElementById("bedDetailOverlay")?.classList.add("open");
     document.body.style.overflow = "hidden";

@@ -140,10 +140,11 @@ export function renderBedTile(bed) {
     const cropName = crop ? crop.cropName : "Empty";
     const dayCount = crop ? `D${daysSince(crop.plantingDate)}` : "Ready";
     const warnWater = waterStatus.needsWater;
+    const safeBedNum = escapeHtml(String(bed.bedNumber));
 
     return `
-    <div class="bed-tile${warnWater ? " needs-water" : ""}${!isGrowing ? " is-empty" : ""}" onclick="openBedDetail(${bed.bedNumber})">
-        <span class="bed-tile-num">${bed.bedNumber}</span>
+    <div class="bed-tile${warnWater ? " needs-water" : ""}${!isGrowing ? " is-empty" : ""}" onclick="openBedDetail('${safeBedNum}')">
+        <span class="bed-tile-num">${safeBedNum}</span>
         <span class="bed-tile-crop">${escapeHtml(cropName)}</span>
         <div class="bed-tile-status">
             <span class="bed-tile-dot${warnWater ? " warn" : ""}"></span>
@@ -163,9 +164,11 @@ export function renderBedGrid(beds) {
     const { grouped, solo } = groupByPlot(beds);
     let html = "";
 
+    const numSort = (a, b) => (Number(a.bedNumber) || 0) - (Number(b.bedNumber) || 0);
+
     Object.keys(grouped).forEach(plotId => {
         const plot = getPlot(plotId);
-        const plotBeds = grouped[plotId];
+        const plotBeds = (grouped[plotId] || []).slice().sort(numSort);
         const { total, flagged } = plotWateringRollup(plotId);
         const waterBadge = flagged > 0 ? `<span style="color:#d97706;font-weight:700;">💧 ${flagged}/${total} unwatered</span>` : `<span>💧 All watered</span>`;
 
@@ -182,13 +185,14 @@ export function renderBedGrid(beds) {
     });
 
     if (solo.length) {
+        const soloSorted = solo.slice().sort(numSort);
         html += `
         <div class="bed-grid-plot-group">
             <div class="bed-grid-plot-header">
-                <p class="bed-grid-plot-title">Standalone Beds (${solo.length})</p>
+                <p class="bed-grid-plot-title">Standalone Beds (${soloSorted.length})</p>
             </div>
             <div class="bed-grid-tiles">
-                ${solo.map(renderBedTile).join("")}
+                ${soloSorted.map(renderBedTile).join("")}
             </div>
         </div>`;
     }
