@@ -78,10 +78,11 @@ export function populateBedDropdown() {
 // --- 2. Bed List & Grid Renderers ---
 export function renderGrowingBedCard(bed) {
     const lastLine = lastActivityLabel(bed.lastActivity);
+    const safeBedNum = escapeHtml(String(bed.bedNumber));
     return `
-    <div class="batch-card bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
+    <div class="batch-card bed-card-clickable" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
         <div class="bed-card-header">
-            <p class="batch-title">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
+            <p class="batch-title">Bed ${safeBedNum}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
             <span class="bed-chevron">›</span>
         </div>
         <div class="bed-crops">
@@ -98,10 +99,11 @@ export function renderGrowingBedCard(bed) {
 
 export function renderEmptyBedCard(bed) {
     const lastLine = lastActivityLabel(bed.lastActivity);
+    const safeBedNum = escapeHtml(String(bed.bedNumber));
     return `
-    <div class="batch-card bed-card-empty bed-card-clickable" onclick="openBedDetail(${bed.bedNumber})">
+    <div class="batch-card bed-card-empty bed-card-clickable" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
         <div class="bed-card-header">
-            <p class="batch-title" style="color:#888;">Bed ${bed.bedNumber}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
+            <p class="batch-title" style="color:#888;">Bed ${safeBedNum}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
             <span class="bed-chevron">›</span>
         </div>
         <p class="bed-empty-label">Ready to sow</p>

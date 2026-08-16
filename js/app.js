@@ -1150,14 +1150,18 @@ export function openPlotDetail(plotId) {
     const members = bedsInPlot(plotId);
     const content = document.getElementById("plotDetailContent");
     if (content) {
-        content.innerHTML = members.length ? members.map(b => `
-            <div class="bed-detail-row" style="cursor:pointer;" onclick="openBedFromPlot('${escapeHtml(String(plotId))}', ${b.bedNumber})">
+        content.innerHTML = members.length ? members.map(b => {
+            const safeBNum = escapeHtml(String(b.bedNumber));
+            const safePId = escapeHtml(String(plotId));
+            return `
+            <div class="bed-detail-row" style="cursor:pointer;" data-plot="${safePId}" data-bed="${safeBNum}" onclick="openBedFromPlot('${safePId}', '${safeBNum}')">
                 <div class="bed-detail-info">
-                    <p class="bed-detail-name">Bed ${escapeHtml(String(b.bedNumber))}${b.name ? " · " + escapeHtml(b.name) : ""}</p>
+                    <p class="bed-detail-name">Bed ${safeBNum}${b.name ? " · " + escapeHtml(b.name) : ""}</p>
                     <p class="bed-detail-meta">${(b.crops || []).length} crop${(b.crops || []).length === 1 ? "" : "s"}</p>
                 </div>
                 <span class="bed-chevron">›</span>
-            </div>`).join("") : '<p style="color:#888;padding:12px 0;">No beds assigned yet.</p>';
+            </div>`;
+        }).join("") : '<p style="color:#888;padding:12px 0;">No beds assigned yet.</p>';
     }
 
     document.getElementById("plotDetailOverlay")?.classList.add("open");
