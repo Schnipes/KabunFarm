@@ -468,11 +468,31 @@ function updateSyncBadge() {
     }
 }
 
-function handleSyncBadgeClick() {
-    if (navigator.onLine) {
-        showToast("Online — all changes synced");
-    } else {
+async function handleSyncBadgeClick() {
+    if (!navigator.onLine) {
         showToast("Offline — changes will sync when connected");
+        return;
+    }
+    if (!db) {
+        showToast("❌ Firebase database is not initialized");
+        return;
+    }
+    showToast("Testing Firebase Cloud connection...");
+    try {
+        // 1. Probe read config/auth
+        const authSnap = await db.collection("config").doc("auth").get();
+        // 2. Probe write & delete
+        const testRef = db.collection("config").doc("_conn_probe");
+        await testRef.set({ probe: true, timestamp: Date.now() });
+        await testRef.delete();
+        
+        // Also trigger seeding if formulas collection was empty
+        await seedDefaultFormulas();
+        
+        showToast("✅ Firebase Connected: Cloud Sync Active!");
+    } catch (e) {
+        console.error("Firebase connection probe failed:", e);
+        alert("Firebase Cloud Connection Test\n\n❌ Status: Write Failed\nError Code: " + (e.code || "unknown") + "\nMessage: " + (e.message || e) + "\n\nTip: Check if your Firestore Rules allow writes in Firebase Console.");
     }
 }
 
@@ -1057,7 +1077,10 @@ function addBed() {
     populateBedDropdown();
 
     db.collection("beds").doc(String(nextNum)).set(newBed)
-        .catch(e => console.error("addBed failed:", e));
+        .catch(e => {
+            console.error("addBed failed:", e);
+            showToast("⚠️ Cloud sync error: " + (e.code || e.message));
+        });
     showToast(`Bed ${nextNum} added!`);
 }
 
