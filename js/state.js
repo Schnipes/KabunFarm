@@ -130,8 +130,19 @@ export const state = {
     selectedCategoryColor: null,
     editingPlotId: null,
     currentPlotId: null,
-    bedDetailReturnPlotId: null
+    bedDetailReturnPlotId: null,
+    archivedBedsData: []
 };
+
+export function findNextAvailableBedNumber(bedsList) {
+    const list = bedsList || state.bedsData || [];
+    const existing = new Set(list.map(b => Number(b.bedNumber)).filter(n => !isNaN(n) && n > 0));
+    let num = 1;
+    while (existing.has(num)) {
+        num++;
+    }
+    return num;
+}
 
 // --- String & Date Utilities ---
 export function escapeHtml(str) {

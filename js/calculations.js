@@ -42,7 +42,9 @@ export function latestPlotWatering(plotId) {
 }
 
 export function getWateringStatus(bed) {
-    if (!bed || !bed.crops || !bed.crops.length) return { needsWater: false, days: null };
+    if (!bed || bed.status === "fallow" || bed.status === "retired" || !bed.crops || !bed.crops.length) {
+        return { needsWater: false, days: null };
+    }
 
     let lastWatered = bed.lastWatered ? ymd(bed.lastWatered) : null;
     const farmWide = latestWholeFarmWatering();

@@ -25,7 +25,8 @@ import {
     getPlot,
     bedsInPlot,
     getKnownCropNames,
-    normalizeCropName
+    normalizeCropName,
+    findNextAvailableBedNumber
 } from "./state.js";
 
 import {
@@ -182,11 +183,13 @@ export async function fetchBeds() {
             firestore.collection("batches").where("status", "==", "done").get()
         ]);
 
-        const beds          = bedsSnap.docs.map(d => ({ ...d.data() })).filter(b => b.status !== "retired");
+        const allBeds       = bedsSnap.docs.map(d => ({ ...d.data() }));
+        const activeBeds    = allBeds.filter(b => b.status !== "retired");
+        state.archivedBedsData = allBeds.filter(b => b.status === "retired");
         const activeBatches = activeBatchSnap.docs.map(d => ({ ...d.data() }));
         const doneBatches   = doneBatchSnap.docs.map(d => ({ ...d.data() }));
 
-        state.bedsData = beds.map(bed => ({
+        state.bedsData = activeBeds.map(bed => ({
             ...bed,
             crops: activeBatches
                 .filter(b => String(b.bedNumber) === String(bed.bedNumber))
@@ -206,6 +209,9 @@ export async function fetchBeds() {
         populateBedDropdown();
         renderBedFilterChips();
         refreshCropDatalists();
+
+        const countEl = document.getElementById("archivedBedsCount");
+        if (countEl) countEl.textContent = String(state.archivedBedsData.length);
     } catch (e) {
         console.error("Could not load beds:", e);
     }
@@ -343,44 +349,194 @@ export async function fetchWeather() {
 }
 
 // --- Bed Actions ---
-export function addBed() {
+export function addBed(options) {
     if (state.addBedPending) return;
     state.addBedPending = true;
-    setTimeout(() => { state.addBedPending = false; }, 2000);
+    setTimeout(() => { state.addBedPending = false; }, 1000);
 
-    const activeNums = state.bedsData.map(b => Number(b.bedNumber)).filter(n => !isNaN(n) && n > 0);
-    const nextNum = activeNums.length ? Math.max(...activeNums) + 1 : 1;
-    state.maxBedNumber = nextNum;
-    localStorage.setItem(BED_MAX_KEY, String(state.maxBedNumber));
+    const targetBedNum = options?.bedNumber 
+        ? String(options.bedNumber).trim()
+        : String(findNextAvailableBedNumber(state.bedsData));
 
-    const newBed = {
-        bedNumber: nextNum,
-        location:  "commercial",
-        status:    "active",
-        plotId:    "",
-        crops:     [],
-        lastActivity: null,
-        lastWatered:  null
-    };
+    if (!targetBedNum) {
+        showToast("⚠️ Bed identifier is required");
+        return;
+    }
+
+    // Check if bed is already active
+    if (state.bedsData.some(b => String(b.bedNumber) === targetBedNum)) {
+        showToast(`⚠️ Bed ${targetBedNum} already exists!`);
+        return;
+    }
+
+    // Check if bed was previously archived
+    const archivedIdx = state.archivedBedsData.findIndex(b => String(b.bedNumber) === targetBedNum);
+    let newBed;
+    if (archivedIdx >= 0) {
+        newBed = state.archivedBedsData[archivedIdx];
+        newBed.status = "active";
+        if (options?.name !== undefined) newBed.name = options.name;
+        if (options?.plotId !== undefined) newBed.plotId = options.plotId;
+        state.archivedBedsData.splice(archivedIdx, 1);
+    } else {
+        newBed = {
+            bedNumber: targetBedNum,
+            name:      options?.name || "",
+            plotId:    options?.plotId || "",
+            location:  "commercial",
+            status:    "active",
+            crops:     [],
+            cropHistory: [],
+            lastActivity: null,
+            lastWatered:  null
+        };
+    }
 
     state.bedsData.push(newBed);
+    // Sort beds naturally (numeric ascending)
+    state.bedsData.sort((a, b) => {
+        const na = Number(a.bedNumber), nb = Number(b.bedNumber);
+        return (!isNaN(na) && !isNaN(nb)) ? na - nb : String(a.bedNumber).localeCompare(String(b.bedNumber));
+    });
+
+    const activeNums = state.bedsData.map(b => Number(b.bedNumber)).filter(n => !isNaN(n) && n > 0);
+    state.maxBedNumber = activeNums.length ? Math.max(...activeNums) : 0;
+    localStorage.setItem(BED_MAX_KEY, String(state.maxBedNumber));
     saveBeds();
     renderBeds(state.bedsData);
     populateBedDropdown();
+    renderBedFilterChips();
+
+    const countEl = document.getElementById("archivedBedsCount");
+    if (countEl) countEl.textContent = String(state.archivedBedsData.length);
 
     const firestore = getDb();
     if (firestore) {
-        firestore.collection("beds").doc(String(nextNum)).set(newBed)
+        firestore.collection("beds").doc(String(targetBedNum)).set(newBed)
             .catch(e => showToast("⚠️ Cloud sync error: " + (e.code || e.message)));
     }
-    showToast(`Bed ${nextNum} added!`);
+    showToast(`Bed ${targetBedNum} added!`);
+}
+
+export function bulkAddBeds(startNum, count, plotId = "") {
+    const start = parseInt(startNum, 10) || 1;
+    const numBeds = parseInt(count, 10) || 1;
+    if (numBeds < 1 || numBeds > 50) {
+        showToast("⚠️ Please enter a count between 1 and 50");
+        return;
+    }
+
+    const firestore = getDb();
+    const batch = firestore ? firestore.batch() : null;
+    const addedNums = [];
+
+    for (let i = 0; i < numBeds; i++) {
+        const bedNumStr = String(start + i);
+        if (state.bedsData.some(b => String(b.bedNumber) === bedNumStr)) continue;
+
+        const newBed = {
+            bedNumber: bedNumStr,
+            name:      "",
+            plotId:    plotId || "",
+            location:  "commercial",
+            status:    "active",
+            crops:     [],
+            cropHistory: [],
+            lastActivity: null,
+            lastWatered:  null
+        };
+        state.bedsData.push(newBed);
+        addedNums.push(bedNumStr);
+
+        if (batch) {
+            batch.set(firestore.collection("beds").doc(bedNumStr), newBed);
+        }
+    }
+
+    if (!addedNums.length) {
+        showToast("⚠️ All beds in that range already exist!");
+        return;
+    }
+
+    state.bedsData.sort((a, b) => {
+        const na = Number(a.bedNumber), nb = Number(b.bedNumber);
+        return (!isNaN(na) && !isNaN(nb)) ? na - nb : String(a.bedNumber).localeCompare(String(b.bedNumber));
+    });
+
+    const activeNums = state.bedsData.map(b => Number(b.bedNumber)).filter(n => !isNaN(n) && n > 0);
+    state.maxBedNumber = activeNums.length ? Math.max(...activeNums) : 0;
+    localStorage.setItem(BED_MAX_KEY, String(state.maxBedNumber));
+    saveBeds();
+    renderBeds(state.bedsData);
+    populateBedDropdown();
+    renderBedFilterChips();
+
+    if (batch) {
+        batch.commit().catch(e => console.error("Bulk add Firestore batch error:", e));
+    }
+    showToast(`Added ${addedNums.length} beds (Beds ${addedNums[0]}–${addedNums[addedNums.length - 1]})`);
+}
+
+export function toggleBedFallow(bedNum) {
+    const targetNum = bedNum || state.selectedBedForLog;
+    const bed = getBed(targetNum);
+    if (!bed) return;
+
+    const isFallow = bed.status === "fallow";
+    bed.status = isFallow ? "active" : "fallow";
+    saveBeds();
+    renderBeds(state.bedsData);
+
+    const btn = document.getElementById("btnToggleFallow");
+    if (btn) {
+        btn.textContent = bed.status === "fallow" ? "🟢 Set Active" : "💤 Set Fallow";
+        btn.classList.toggle("active", bed.status === "fallow");
+    }
+
+    const firestore = getDb();
+    if (firestore) {
+        firestore.collection("beds").doc(String(bed.bedNumber)).update({ status: bed.status })
+            .catch(e => console.error("toggleBedFallow failed:", e));
+    }
+    showToast(bed.status === "fallow" ? `Bed ${bed.bedNumber} is now resting (fallow)` : `Bed ${bed.bedNumber} is now active`);
+}
+
+export function restoreBed(bedNum) {
+    const idx = state.archivedBedsData.findIndex(b => String(b.bedNumber) === String(bedNum));
+    if (idx < 0) return;
+
+    const bed = state.archivedBedsData.splice(idx, 1)[0];
+    bed.status = "active";
+    state.bedsData.push(bed);
+    state.bedsData.sort((a, b) => {
+        const na = Number(a.bedNumber), nb = Number(b.bedNumber);
+        return (!isNaN(na) && !isNaN(nb)) ? na - nb : String(a.bedNumber).localeCompare(String(b.bedNumber));
+    });
+
+    const activeNums = state.bedsData.map(b => Number(b.bedNumber)).filter(n => !isNaN(n) && n > 0);
+    state.maxBedNumber = activeNums.length ? Math.max(...activeNums) : 0;
+    localStorage.setItem(BED_MAX_KEY, String(state.maxBedNumber));
+    saveBeds();
+    renderBeds(state.bedsData);
+    populateBedDropdown();
+    renderBedFilterChips();
+
+    const countEl = document.getElementById("archivedBedsCount");
+    if (countEl) countEl.textContent = String(state.archivedBedsData.length);
+
+    const firestore = getDb();
+    if (firestore) {
+        firestore.collection("beds").doc(String(bed.bedNumber)).update({ status: "active" })
+            .catch(e => console.error("restoreBed failed:", e));
+    }
+    showToast(`Bed ${bed.bedNumber} restored to active beds!`);
 }
 
 export function deleteBed() {
     const bed = getBed(state.selectedBedForLog);
     if (!bed) return;
     const label = bed.name ? `Bed ${bed.bedNumber} · ${bed.name}` : `Bed ${bed.bedNumber}`;
-    if (!confirm(`Retire ${label}? It will be hidden from the home screen.`)) return;
+    if (!confirm(`Retire ${label}? It will be moved to Archived Beds.`)) return;
 
     const firestore = getDb();
     if (bed.crops && bed.crops.length && firestore) {
@@ -392,11 +548,18 @@ export function deleteBed() {
         });
     }
 
+    const retiredBed = { ...bed, status: "retired" };
     state.bedsData = state.bedsData.filter(b => String(b.bedNumber) !== String(state.selectedBedForLog));
+    state.archivedBedsData.push(retiredBed);
+
     saveBeds();
     renderBeds(state.bedsData);
     populateBedDropdown();
+    renderBedFilterChips();
     state.bedDetailReturnPlotId = null;
+
+    const countEl = document.getElementById("archivedBedsCount");
+    if (countEl) countEl.textContent = String(state.archivedBedsData.length);
 
     const overlay = document.getElementById("bedDetailOverlay");
     if (overlay) overlay.classList.remove("open");
@@ -406,7 +569,7 @@ export function deleteBed() {
         firestore.collection("beds").doc(String(state.selectedBedForLog)).update({ status: "retired" })
             .catch(e => console.error("deleteBed failed:", e));
     }
-    showToast(`${label} retired`);
+    showToast(`${label} archived`);
 }
 
 export function saveBedName() {
@@ -453,41 +616,6 @@ export function saveBedPlot() {
         }
     }
     showToast(plotId ? `Added to ${getPlot(plotId)?.name || "plot"}` : "Removed from plot");
-}
-
-export async function purgeAllBedsAndPlots() {
-    if (!confirm("Are you sure you want to purge all beds and plots? This will reset all bed counters back to 0.")) return;
-    
-    const firestore = getDb();
-    if (firestore) {
-        try {
-            const [bedsSnap, plotsSnap, batchesSnap] = await Promise.all([
-                firestore.collection("beds").get(),
-                firestore.collection("plots").get(),
-                firestore.collection("batches").get()
-            ]);
-            const batch = firestore.batch();
-            bedsSnap.docs.forEach(doc => batch.delete(doc.ref));
-            plotsSnap.docs.forEach(doc => batch.delete(doc.ref));
-            batchesSnap.docs.forEach(doc => batch.delete(doc.ref));
-            await batch.commit();
-        } catch (e) {
-            console.error("Purge Firestore failed:", e);
-        }
-    }
-
-    state.bedsData = [];
-    state.plotsData = [];
-    state.maxBedNumber = 0;
-    localStorage.removeItem(BEDS_CACHE_KEY);
-    localStorage.removeItem(PLOTS_CACHE_KEY);
-    localStorage.removeItem(BED_MAX_KEY);
-    localStorage.removeItem(LAST_BED_KEY);
-
-    renderBeds(state.bedsData);
-    populateBedDropdown();
-    renderBedFilterChips();
-    showToast("All beds & plots purged! Ready to add Bed 1.");
 }
 
 export function deletePlot() {

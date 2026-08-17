@@ -111,6 +111,18 @@ export function renderEmptyBedCard(bed) {
     </div>`;
 }
 
+export function renderFallowBedCard(bed) {
+    const safeBedNum = escapeHtml(String(bed.bedNumber));
+    return `
+    <div class="batch-card bed-card-fallow bed-card-clickable" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
+        <div class="bed-card-header">
+            <p class="batch-title" style="color:#64748b;">Bed ${safeBedNum}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
+            <span class="bed-chevron">›</span>
+        </div>
+        <p class="bed-empty-label" style="color:#64748b;">💤 Fallow (Soil Rest / Solarization)</p>
+    </div>`;
+}
+
 export function renderPlotCard(plotId, beds) {
     const plot = getPlot(plotId);
     const label = plot ? plot.name : "Plot";
@@ -136,20 +148,30 @@ export function renderPlotCard(plotId, beds) {
 }
 
 export function renderBedTile(bed) {
-    const isGrowing = bed.crops && bed.crops.length > 0;
+    const isFallow = bed.status === "fallow";
+    const isGrowing = !isFallow && bed.crops && bed.crops.length > 0;
     const waterStatus = getWateringStatus(bed);
     const crop = isGrowing ? bed.crops[0] : null;
-    const cropName = crop ? crop.cropName : "Empty";
-    const dayCount = crop ? `D${daysSince(crop.plantingDate)}` : "Ready";
+    const cropName = isFallow ? "Fallow" : (crop ? crop.cropName : "Empty");
+    const dayCount = isFallow ? "Rest" : (crop ? `D${daysSince(crop.plantingDate)}` : "Ready");
     const warnWater = waterStatus.needsWater;
     const safeBedNum = escapeHtml(String(bed.bedNumber));
 
+    let tileClass = "bed-tile";
+    if (isFallow) tileClass += " is-fallow";
+    else if (!isGrowing) tileClass += " is-empty";
+    if (warnWater) tileClass += " needs-water";
+
+    let dotClass = "bed-tile-dot";
+    if (isFallow) dotClass += " fallow";
+    else if (warnWater) dotClass += " warn";
+
     return `
-    <div class="bed-tile${warnWater ? " needs-water" : ""}${!isGrowing ? " is-empty" : ""}" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
+    <div class="${tileClass}" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
         <span class="bed-tile-num">${safeBedNum}</span>
         <span class="bed-tile-crop">${escapeHtml(cropName)}</span>
         <div class="bed-tile-status">
-            <span class="bed-tile-dot${warnWater ? " warn" : ""}"></span>
+            <span class="${dotClass}"></span>
             <span>${dayCount}</span>
         </div>
     </div>`;
@@ -212,10 +234,13 @@ export function renderBeds(beds) {
     document.getElementById("btnViewList")?.classList.toggle("active", state.bedViewMode === "list");
     document.getElementById("btnViewGrid")?.classList.toggle("active", state.bedViewMode === "grid");
 
+    const countEl = document.getElementById("archivedBedsCount");
+    if (countEl) countEl.textContent = String((state.archivedBedsData || []).length);
+
     if (!beds.length) {
         if (listContainer) {
             listContainer.innerHTML = `
-            <div class="empty-beds-card" onclick="addBed()">
+            <div class="empty-beds-card" onclick="openAddBedModal()">
                 <span class="empty-beds-icon">🌱</span>
                 <p class="empty-beds-title">Add your first bed</p>
                 <p class="empty-beds-hint">Tap to create Bed 1</p>
@@ -228,8 +253,9 @@ export function renderBeds(beds) {
     renderBedGrid(beds);
 
     if (!listContainer) return;
-    const growing = beds.filter(b => b.crops && b.crops.length > 0);
-    const empty   = beds.filter(b => !b.crops || b.crops.length === 0);
+    const growing = beds.filter(b => b.status !== "fallow" && b.crops && b.crops.length > 0);
+    const empty   = beds.filter(b => b.status !== "fallow" && (!b.crops || b.crops.length === 0));
+    const fallow  = beds.filter(b => b.status === "fallow");
     let html = "";
 
     if (growing.length) {
@@ -246,7 +272,36 @@ export function renderBeds(beds) {
         html += solo.map(renderEmptyBedCard).join("");
     }
 
+    if (fallow.length) {
+        html += `<p class="bed-group-label" style="margin-top:16px;">Fallow / Resting (${fallow.length})</p>`;
+        const { grouped, solo } = groupByPlot(fallow);
+        html += Object.keys(grouped).map(plotId => renderPlotCard(plotId, grouped[plotId])).join("");
+        html += solo.map(renderFallowBedCard).join("");
+    }
+
     listContainer.innerHTML = html;
+}
+
+export function renderArchivedBedsModal() {
+    const list = document.getElementById("archivedBedsList");
+    if (!list) return;
+    const archived = state.archivedBedsData || [];
+    if (!archived.length) {
+        list.innerHTML = '<p style="color:#888;font-size:14px;padding:16px 0;text-align:center;">No archived beds.</p>';
+        return;
+    }
+    list.innerHTML = archived.map(b => {
+        const safeBedNum = escapeHtml(String(b.bedNumber));
+        const nameStr = b.name ? ` · ${escapeHtml(b.name)}` : "";
+        return `
+        <div class="archived-bed-item">
+            <div class="archived-bed-info">
+                <span class="archived-bed-name">Bed ${safeBedNum}${nameStr}</span>
+                <span class="archived-bed-meta">Status: Retired</span>
+            </div>
+            <button type="button" class="restore-btn" onclick="restoreBed('${safeBedNum}')">♻️ Restore</button>
+        </div>`;
+    }).join("");
 }
 
 // --- 3. Weather View ---

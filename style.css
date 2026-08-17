@@ -2160,3 +2160,102 @@ textarea.invalid {
 .formula-apply-btn:active {
   background: #c7ebd0;
 }
+
+/* ---------- Fallow Beds & Archived Beds Lifecycle ---------- */
+.bed-tile.is-fallow {
+  background: #f1f5f9;
+  border-color: #cbd5e1;
+  opacity: 0.85;
+}
+.bed-tile-dot.fallow {
+  background: #94a3b8;
+}
+
+.batch-card.bed-card-fallow {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  opacity: 0.9;
+}
+
+.archived-beds-footer {
+  text-align: center;
+  margin-top: 14px;
+  margin-bottom: 8px;
+}
+.archived-beds-link {
+  background: none;
+  border: none;
+  color: var(--color-text-dim);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 8px 12px;
+  border-radius: 8px;
+  transition: background 0.15s ease;
+}
+.archived-beds-link:hover, .archived-beds-link:active {
+  background: var(--color-surface);
+  color: var(--color-text);
+}
+
+.bed-detail-manage-btns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 12px;
+}
+.bed-fallow-btn {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-border);
+  color: var(--color-text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 10px;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.bed-fallow-btn.active {
+  background: #f1f5f9;
+  border-color: #94a3b8;
+  color: #475569;
+}
+
+.archived-bed-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  margin-bottom: 8px;
+}
+.archived-bed-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.archived-bed-name {
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--color-text);
+}
+.archived-bed-meta {
+  font-size: 12px;
+  color: var(--color-text-dim);
+}
+.restore-btn {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 14px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.restore-btn:active {
+  background: var(--color-primary-dark);
+}

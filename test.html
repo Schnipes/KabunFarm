@@ -123,10 +123,10 @@
   import * as App from "./js/app.js";
 
   // Re-expose to local test scope
-  const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS } = State;
+  const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber } = State;
   const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal } = Calc;
   const { planDayLabel } = Views;
-  const { setDatePreset, syncDatePresets, addBed, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
+  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, toggleBedFallow, restoreBed, deleteBed, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
   // We no longer shadow the global state with 'let' variables.
@@ -786,6 +786,71 @@
     assertEqual(cropB.net, 20.15 - 16.665);
     const cropA = pl.find(c => c.cropName === "Crop A");
     assertEqual(cropA.weightKg, 1.5);
+  });
+
+  // ---------------------------------------------------------------------
+  group("Flexible Bed Lifecycle & Management");
+
+  test("findNextAvailableBedNumber finds first sequential gap", () => {
+    // Gap at 3
+    const beds = [{ bedNumber: 1 }, { bedNumber: 2 }, { bedNumber: 4 }, { bedNumber: 5 }];
+    assertEqual(findNextAvailableBedNumber(beds), 3);
+  });
+
+  test("findNextAvailableBedNumber returns max+1 when sequence is continuous", () => {
+    const beds = [{ bedNumber: 1 }, { bedNumber: 2 }, { bedNumber: 3 }];
+    assertEqual(findNextAvailableBedNumber(beds), 4);
+  });
+
+  test("findNextAvailableBedNumber returns 1 for empty bed array", () => {
+    assertEqual(findNextAvailableBedNumber([]), 1);
+  });
+
+  test("getWateringStatus never flags a fallow bed as needing water", () => {
+    const fallowBed = {
+      bedNumber: 5,
+      status: "fallow",
+      crops: [{ cropName: "Kangkong", plantingDate: "2026-06-01" }],
+      lastWatered: daysAgoStr(10)
+    };
+    const status = getWateringStatus(fallowBed);
+    assertEqual(status.needsWater, false);
+    assertEqual(status.days, null);
+  });
+
+  test("addBed creates bed with custom alphanumeric identifier", () => {
+    State.state.bedsData = [];
+    addBed({ bedNumber: "Tunnel_1", name: "Seedling Nursery" });
+    const bed = getBed("Tunnel_1");
+    assertTrue(bed !== undefined, "Custom bed Tunnel_1 should exist");
+    assertEqual(bed.name, "Seedling Nursery");
+    assertEqual(bed.status, "active");
+  });
+
+  test("bulkAddBeds provisions a range of sequential beds", () => {
+    State.state.bedsData = [];
+    bulkAddBeds(10, 3);
+    assertEqual(State.state.bedsData.length, 3);
+    assertEqual(State.state.bedsData[0].bedNumber, "10");
+    assertEqual(State.state.bedsData[1].bedNumber, "11");
+    assertEqual(State.state.bedsData[2].bedNumber, "12");
+  });
+
+  test("toggleBedFallow flips status between active and fallow", () => {
+    State.state.bedsData = [{ bedNumber: 7, status: "active", crops: [] }];
+    toggleBedFallow(7);
+    assertEqual(getBed(7).status, "fallow");
+    toggleBedFallow(7);
+    assertEqual(getBed(7).status, "active");
+  });
+
+  test("restoreBed moves retired bed back to active bedsData", () => {
+    State.state.bedsData = [{ bedNumber: 1, status: "active", crops: [] }];
+    State.state.archivedBedsData = [{ bedNumber: 2, name: "Old Okra", status: "retired", crops: [] }];
+    restoreBed(2);
+    assertEqual(State.state.bedsData.length, 2);
+    assertEqual(getBed(2).status, "active");
+    assertEqual(State.state.archivedBedsData.length, 0);
   });
 
   // ---------------------------------------------------------------------

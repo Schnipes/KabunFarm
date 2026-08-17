@@ -78,13 +78,16 @@
           </div>
           <div style="display:flex;gap:8px;">
             <button class="add-bed-btn" onclick="openPlotAssignModal()">+ Plot</button>
-            <button class="add-bed-btn" onclick="addBed()">+ Add Bed</button>
+            <button class="add-bed-btn" onclick="openAddBedModal()">+ Add Bed</button>
           </div>
         </div>
         <div id="batchList">
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading beds...</p>
         </div>
         <div id="bedGridList" class="bed-grid-wrap" hidden></div>
+        <div class="archived-beds-footer">
+          <button type="button" class="archived-beds-link" onclick="openArchivedBedsModal()" id="btnArchivedBeds">📁 Archived Beds (<span id="archivedBedsCount">0</span>)</button>
+        </div>
       </section>
 
       <!-- Quick log — secondary, for whole-farm or fast access -->
@@ -391,7 +394,10 @@
           <span class="icon" aria-hidden="true">🌱</span><span>Sow</span>
         </button>
       </div>
-      <button class="bed-delete-btn" onclick="deleteBed()">Retire this bed</button>
+      <div class="bed-detail-manage-btns">
+        <button type="button" class="bed-fallow-btn" id="btnToggleFallow" onclick="toggleBedFallow()">💤 Set Fallow</button>
+        <button type="button" class="bed-delete-btn" onclick="deleteBed()">Retire this bed</button>
+      </div>
     </div>
   </div>
 
@@ -606,8 +612,73 @@
     </div>
   </div>
 
+  <!-- Add Bed Modal (Single & Bulk) -->
+  <div class="modal-overlay" id="addBedModalOverlay">
+    <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
+      <div class="modal-header">
+        <h2>Add Bed</h2>
+        <button class="modal-close" onclick="closeAddBedModal()" aria-label="Close">✕</button>
+      </div>
+      <div class="pill-group" style="margin-bottom:14px;">
+        <button type="button" class="pill-choice active" id="addBedTabSingle" onclick="switchAddBedTab('single')">Single Bed</button>
+        <button type="button" class="pill-choice" id="addBedTabBulk" onclick="switchAddBedTab('bulk')">Bulk Range</button>
+      </div>
+      <form id="addBedForm" onsubmit="handleAddBedSubmit(event)" novalidate>
+        <div id="addBedSingleSection">
+          <div class="form-field">
+            <label for="addBedNumber">Bed Number / ID</label>
+            <input type="text" id="addBedNumber" placeholder="e.g. 23 or A1" required>
+          </div>
+          <div class="form-field">
+            <label for="addBedName">Bed Name <span style="font-size:11px;color:#888;">optional label</span></label>
+            <input type="text" id="addBedName" placeholder="e.g. Nursery Row">
+          </div>
+          <div class="form-field">
+            <label for="addBedPlotSelect">Assign to Plot <span style="font-size:11px;color:#888;">optional</span></label>
+            <select id="addBedPlotSelect">
+              <option value="">No plot (Standalone)</option>
+            </select>
+          </div>
+        </div>
+        <div id="addBedBulkSection" hidden>
+          <div class="money-row">
+            <div class="form-field">
+              <label for="bulkBedStart">Starting Bed #</label>
+              <input type="number" inputmode="numeric" id="bulkBedStart" value="1" min="1">
+            </div>
+            <div class="form-field">
+              <label for="bulkBedCount">Number of Beds</label>
+              <input type="number" inputmode="numeric" id="bulkBedCount" value="5" min="1" max="50">
+            </div>
+          </div>
+          <div class="form-field">
+            <label for="bulkBedPlotSelect">Assign all to Plot <span style="font-size:11px;color:#888;">optional</span></label>
+            <select id="bulkBedPlotSelect">
+              <option value="">No plot (Standalone)</option>
+            </select>
+          </div>
+        </div>
+        <button type="submit" class="submit-btn" id="addBedSubmitBtn" style="margin-top:12px;">Create Bed</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Archived Beds Modal -->
+  <div class="modal-overlay" id="archivedBedsModalOverlay">
+    <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
+      <div class="modal-header">
+        <h2>Archived Beds</h2>
+        <button class="modal-close" onclick="closeArchivedBedsModal()" aria-label="Close">✕</button>
+      </div>
+      <p style="font-size:12.5px;color:var(--color-text-dim);margin:0 0 12px 0;">Retired beds are hidden from the active farm view. Restoring a bed brings it back to the home grid.</p>
+      <div id="archivedBedsList"></div>
+    </div>
+  </div>
+
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="js/app.js?v=20260817a"></script>
+  <script type="module" src="js/app.js?v=20260817b"></script>
 </body>
 </html>

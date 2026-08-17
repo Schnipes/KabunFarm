@@ -30,7 +30,8 @@ import {
     getBed,
     getPlot,
     bedsInPlot,
-    resolveTaskScopeMeta
+    resolveTaskScopeMeta,
+    findNextAvailableBedNumber
 } from "./state.js";
 
 import {
@@ -39,6 +40,28 @@ import {
     calcSaleTotal,
     exportActivityCsv
 } from "./calculations.js";
+
+export {
+    getDb,
+    checkPin,
+    updateSyncBadge,
+    handleSyncBadgeClick,
+    fetchBeds,
+    fetchFormulas,
+    fetchTasks,
+    fetchPlots,
+    fetchLogs,
+    fetchWeather,
+    addBed,
+    bulkAddBeds,
+    toggleBedFallow,
+    restoreBed,
+    deleteBed,
+    saveBedName,
+    saveBedPlot,
+    deletePlot,
+    deleteLogEntry
+} from "./db.js";
 
 import {
     getDb,
@@ -52,10 +75,12 @@ import {
     fetchLogs,
     fetchWeather,
     addBed,
+    bulkAddBeds,
+    toggleBedFallow,
+    restoreBed,
     deleteBed,
     saveBedName,
     saveBedPlot,
-    purgeAllBedsAndPlots,
     deletePlot,
     deleteLogEntry
 } from "./db.js";
@@ -80,7 +105,8 @@ import {
     renderPlanView,
     renderTodayTasks,
     populateTaskFormulaList,
-    refreshCropDatalists
+    refreshCropDatalists,
+    renderArchivedBedsModal
 } from "./views.js";
 
 // --- 1. View Switching ---
@@ -534,7 +560,10 @@ export function openBedDetail(bedNum) {
     const content = document.getElementById("bedDetailContent");
     let html = "";
 
-    if (!bed.crops || !bed.crops.length) {
+    const isFallow = bed.status === "fallow";
+    if (isFallow) {
+        html += '<p style="color:#64748b;padding:12px 0 8px;font-weight:600;">💤 This bed is currently fallow (resting / solarizing). Set active when ready to sow.</p>';
+    } else if (!bed.crops || !bed.crops.length) {
         html += '<p style="color:#888;padding:12px 0 8px;">Empty — ready to sow.</p>';
     } else {
         html += bed.crops.map(c => `
@@ -567,13 +596,21 @@ export function openBedDetail(bedNum) {
 
     if (content) content.innerHTML = html;
 
-    const isEmpty = !bed.crops || !bed.crops.length;
+    const isEmpty = isFallow || !bed.crops || !bed.crops.length;
     const waterBtn = document.querySelector(".bed-log-actions .water");
     if (waterBtn) waterBtn.hidden = isEmpty;
     const pestBtn = document.querySelector(".bed-log-actions .pest");
     if (pestBtn) pestBtn.hidden = isEmpty;
     const harvestBtn = document.querySelector(".bed-log-actions .harvest");
     if (harvestBtn) harvestBtn.hidden = isEmpty;
+    const sowBtn = document.querySelector(".bed-log-actions .crop");
+    if (sowBtn) sowBtn.hidden = isFallow;
+
+    const fallowBtn = document.getElementById("btnToggleFallow");
+    if (fallowBtn) {
+        fallowBtn.textContent = isFallow ? "🟢 Set Active" : "💤 Set Fallow";
+        fallowBtn.classList.toggle("active", isFallow);
+    }
 
     document.getElementById("bedDetailOverlay")?.classList.add("open");
     document.body.style.overflow = "hidden";
@@ -1279,6 +1316,77 @@ export async function initApp() {
     switchView(activeView);
 }
 
+// --- 9. Add Bed & Archived Beds Modals ---
+export function openAddBedModal(tab = "single") {
+    switchAddBedTab(tab);
+    const nextNum = findNextAvailableBedNumber(state.bedsData);
+    const numInput = document.getElementById("addBedNumber");
+    if (numInput) numInput.value = nextNum;
+    const nameInput = document.getElementById("addBedName");
+    if (nameInput) nameInput.value = "";
+    const startInput = document.getElementById("bulkBedStart");
+    if (startInput) startInput.value = nextNum;
+    const countInput = document.getElementById("bulkBedCount");
+    if (countInput) countInput.value = "5";
+
+    const plotSelects = [document.getElementById("addBedPlotSelect"), document.getElementById("bulkBedPlotSelect")];
+    plotSelects.forEach(select => {
+        if (!select) return;
+        select.innerHTML = '<option value="">No plot (Standalone)</option>' +
+            state.plotsData.map(p => `<option value="${escapeHtml(p.id)}">${escapeHtml(p.name)}</option>`).join("");
+    });
+
+    document.getElementById("addBedModalOverlay")?.classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+export function closeAddBedModal() {
+    document.getElementById("addBedModalOverlay")?.classList.remove("open");
+    document.body.style.overflow = "";
+}
+
+export function switchAddBedTab(tab) {
+    const isSingle = tab === "single";
+    document.getElementById("addBedTabSingle")?.classList.toggle("active", isSingle);
+    document.getElementById("addBedTabBulk")?.classList.toggle("active", !isSingle);
+    const singleSection = document.getElementById("addBedSingleSection");
+    if (singleSection) singleSection.hidden = !isSingle;
+    const bulkSection = document.getElementById("addBedBulkSection");
+    if (bulkSection) bulkSection.hidden = isSingle;
+}
+
+export function handleAddBedSubmit(e) {
+    e.preventDefault();
+    const isSingle = document.getElementById("addBedTabSingle")?.classList.contains("active");
+    if (isSingle) {
+        const bedNumber = document.getElementById("addBedNumber")?.value.trim();
+        const name = document.getElementById("addBedName")?.value.trim() || "";
+        const plotId = document.getElementById("addBedPlotSelect")?.value || "";
+        if (!bedNumber) {
+            showToast("⚠️ Bed identifier is required");
+            return;
+        }
+        addBed({ bedNumber, name, plotId });
+    } else {
+        const start = document.getElementById("bulkBedStart")?.value;
+        const count = document.getElementById("bulkBedCount")?.value;
+        const plotId = document.getElementById("bulkBedPlotSelect")?.value || "";
+        bulkAddBeds(start, count, plotId);
+    }
+    closeAddBedModal();
+}
+
+export function openArchivedBedsModal() {
+    renderArchivedBedsModal();
+    document.getElementById("archivedBedsModalOverlay")?.classList.add("open");
+    document.body.style.overflow = "hidden";
+}
+
+export function closeArchivedBedsModal() {
+    document.getElementById("archivedBedsModalOverlay")?.classList.remove("open");
+    document.body.style.overflow = "";
+}
+
 if (typeof document !== "undefined") {
     if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", initApp);
@@ -1309,7 +1417,16 @@ if (typeof window !== "undefined") {
 
         // Beds & Plots
         addBed,
+        bulkAddBeds,
+        toggleBedFallow,
+        restoreBed,
         deleteBed,
+        openAddBedModal,
+        closeAddBedModal,
+        switchAddBedTab,
+        handleAddBedSubmit,
+        openArchivedBedsModal,
+        closeArchivedBedsModal,
         saveBedName,
         saveBedPlot,
         toggleBedRename,
@@ -1318,7 +1435,6 @@ if (typeof window !== "undefined") {
         logForPlot,
         openBedDetail,
         closeBedDetail,
-        purgeAllBedsAndPlots,
         openPlotAssignModal,
         closePlotAssignModal,
         handlePlotSubmit,
