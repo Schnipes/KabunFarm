@@ -2222,6 +2222,21 @@ textarea.invalid {
   background: #c7ebd0;
 }
 
+.edit-sow-date-btn {
+  background: none;
+  border: none;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 2px 4px;
+  opacity: 0.65;
+  transition: opacity 0.15s, transform 0.1s;
+  vertical-align: middle;
+}
+.edit-sow-date-btn:hover, .edit-sow-date-btn:active {
+  opacity: 1;
+  transform: scale(1.1);
+}
+
 /* ---------- Formula Card Direct Action ---------- */
 .formula-apply-btn {
   display: inline-flex;

@@ -126,7 +126,7 @@
   const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber, LOGS_CACHE_KEY } = State;
   const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal, calculateCropProgress, calculateDailyMomentum, evaluateSprayWindow } = Calc;
   const { planDayLabel, renderTaskCard, renderFarmMomentum } = Views;
-  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
+  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, editPlantingDate, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
   // We no longer shadow the global state with 'let' variables.
@@ -1019,6 +1019,23 @@
     assertEqual(logs.length, 1);
     assertEqual(logs[0].activityCategory, "watering");
     assertEqual(logs[0].bedNumber, "9");
+  });
+
+  test("editPlantingDate updates active crop planting date", () => {
+    State.state.bedsData = [{
+      bedNumber: 3,
+      status: "active",
+      crops: [{ id: "b_1", cropName: "Bayam", plantingDate: "2026-08-01" }]
+    }];
+    const origPrompt = window.prompt;
+    window.prompt = () => "2026-07-25";
+    try {
+      editPlantingDate(3, 0, "2026-08-01");
+      const bed = getBed(3);
+      assertEqual(bed.crops[0].plantingDate, "2026-07-25");
+    } finally {
+      window.prompt = origPrompt;
+    }
   });
 
   // ---------------------------------------------------------------------

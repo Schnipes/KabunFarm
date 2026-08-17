@@ -569,6 +569,7 @@ export function openBedDetail(bedNum) {
     }
 
     state.selectedBedForLog = bedNum;
+    const safeBedNum = escapeHtml(String(bedNum));
     const bedLabel = bed.name ? `Bed ${bedNum} · ${bed.name}` : `Bed ${bedNum}`;
     const titleEl = document.getElementById("bedDetailTitle");
     if (titleEl) titleEl.textContent = bedLabel;
@@ -582,13 +583,16 @@ export function openBedDetail(bedNum) {
     } else if (!bed.crops || !bed.crops.length) {
         html += '<p style="color:#888;padding:12px 0 8px;">Empty — ready to sow.</p>';
     } else {
-        html += bed.crops.map(c => `
+        html += bed.crops.map((c, cropIdx) => `
         <div class="bed-detail-crop">
             <div class="bed-detail-row">
                 <span class="bed-detail-icon">🌱</span>
                 <div class="bed-detail-info">
                     <p class="bed-detail-name">${escapeHtml(c.cropName)}</p>
-                    <p class="bed-detail-meta">Planted ${escapeHtml(c.plantingDate)}</p>
+                    <p class="bed-detail-meta">
+                        Planted ${escapeHtml(c.plantingDate)}
+                        <button type="button" class="edit-sow-date-btn" onclick="editPlantingDate('${safeBedNum}', ${cropIdx}, '${escapeHtml(c.plantingDate)}')" aria-label="Edit planting date" title="Change planting date">✏️</button>
+                    </p>
                 </div>
                 <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
             </div>
@@ -630,6 +634,33 @@ export function openBedDetail(bedNum) {
 
     document.getElementById("bedDetailOverlay")?.classList.add("open");
     document.body.style.overflow = "hidden";
+}
+
+export function editPlantingDate(bedNum, cropIdx, currentDate) {
+    const promptFn = typeof window !== "undefined" && window.prompt ? window.prompt.bind(window) : (typeof globalThis !== "undefined" && globalThis.prompt ? globalThis.prompt : null);
+    const newDate = promptFn ? promptFn("Enter new planting date (YYYY-MM-DD):", currentDate) : null;
+    if (!newDate || newDate.trim() === currentDate) return;
+    const cleanDate = newDate.trim();
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cleanDate)) {
+        showToast("⚠️ Invalid date format. Use YYYY-MM-DD (e.g. 2026-08-10)");
+        return;
+    }
+
+    const bed = getBed(bedNum);
+    if (!bed || !bed.crops || !bed.crops[cropIdx]) return;
+
+    const crop = bed.crops[cropIdx];
+    crop.plantingDate = cleanDate;
+    saveBeds();
+
+    const firestore = getDb();
+    if (firestore && crop.id) {
+        firestore.collection("batches").doc(crop.id).update({ plantingDate: cleanDate }).catch(e => console.error(e));
+    }
+
+    renderBeds(state.bedsData);
+    openBedDetail(bedNum);
+    showToast(`Planting date updated to ${cleanDate}`);
 }
 
 export function closeBedDetail() {
@@ -1526,6 +1557,7 @@ if (typeof window !== "undefined") {
         logForPlot,
         openBedDetail,
         closeBedDetail,
+        editPlantingDate,
         openPlotAssignModal,
         closePlotAssignModal,
         handlePlotSubmit,
