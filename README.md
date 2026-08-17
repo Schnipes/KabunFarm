@@ -1,159 +1,104 @@
 # Kabun Farm Intelligence
 
-An offline-first Progressive Web App for managing and logging daily activity on a small commercial vegetable farm in Kudat, Sabah, Malaysia. Built to work in the field with poor connectivity — actions are queued locally and synced to Google Sheets when back online.
+An offline-first Progressive Web App (PWA) built specifically for managing and logging daily commercial vegetable farm operations in Kudat, Sabah, Malaysia. Engineered for extreme field usability: tropical sunlight glare, poor cellular connectivity, wet/dirty hands, and fast single-handed walking operation.
 
 ---
 
-## Features
+## 🌾 Core Features & Field Capabilities
 
-**Beds, Crops & Plots**
-- Track multiple numbered beds with active crops and day counts
-- Watering alerts — bed cards flag beds not watered in 3+ days
-- Tap a bed to see crop details, past crop history, and log actions
-- Add new beds directly from the app; rename or retire one (hidden from home, kept in records)
-- **Plots** — group beds together (same crop, or any freeform grouping you like) for one-tap bulk logging instead of tapping each bed individually. Home collapses a plot's beds into one card with a rollup watering alert ("6 of 24 beds not watered"). A bed belongs to at most one plot; you can still target one specific bed exactly as precisely as before, plot membership or not.
+### 1. Beds, Crops, Plots & Lifecycle Management
+- **High-Density Grid & List Views:** Instant toggle between compact 2-column Grid view (`☷ Grid`) to scan 22+ beds at a glance, or detailed List view (`☰ List`).
+- **Flexible Bed Provisioning:**
+  - **Custom Identifiers & Gap Filling:** Add any custom bed ID (e.g. fill a missing number `Bed 5`, or use zone prefixes like `A1`, `Tunnel 2`). Automatically suggests the lowest available integer gap.
+  - **Bulk Bed Creation:** Provision ranges of beds in a single tap (e.g. `Starting Bed #23, Count: 10` creates Beds 23–32 and assigns them to a plot).
+- **Fallow / Soil Rest State (`💤 Fallow`):** Toggle resting/solarizing beds into a fallow state. They remain visible in the grid with a muted slate badge but are automatically excluded from watering alerts.
+- **Archived Beds & 1-Tap Restore:** Non-destructive archiving (`status: "retired"`). Access the `📁 Archived Beds` drawer to restore retired beds with their historical crop records intact.
+- **Plots (Block Grouping):** Group beds together (e.g., *Eggplant Plot*, *Greenhouse 1*) for 1-tap bulk watering, spraying, or harvesting. Plots roll up member bed watering alerts into a single summary (*"3 of 22 beds unwatered"*).
+- **Watering Decision Engine:** Automatic 3-day watering alarms (`💧 Not watered in 4d`) that intelligently cross-reference whole-farm, plot-level, and bed-specific logs.
 
-**Activity Logging**
-- Log irrigation, pest control, harvest, and sowing per bed, per plot, or whole farm
-- Harvest marks crops as done and removes them from the active bed; optional harvest weight (kg) for yield tracking, shown on the log card and rolled into cost-per-kg
-- Sowing adds a new crop batch to the bed immediately
-- Optional inputs/notes with a formula picker (see Formulas)
-- Optional cost per activity
-- Pull-to-refresh: swipe down to sync latest data
+### 2. Fast Field Ergonomics (Tier 1 & Tier 2 Overhaul)
+- **Slide-Up Bottom Sheets:** Mobile-native bottom sheet modals with drag handles (`.bottom-sheet-handle`) and safe-area insets (`env(safe-area-inset-bottom)`) for comfortable one-handed thumb reach.
+- **Sunlight Glare Optimized:** High-contrast color palette with amber warning badges (`#fef3c7`/`#92400e`), deep green day chips, and darkened text for direct midday sunlight legibility.
+- **Native Numeric Keypads (`inputmode="decimal"`):** All numeric inputs (quantities, prices, volumes, costs, weights) immediately open the large-key numeric keypad on iOS and Android.
+- **Wet-Finger Tank Steppers:** `[ − ]` and `[ ＋ ]` buttons around sprayer tank counts to quickly scale mix ratios without fiddling with tiny text inputs.
+- **1-Tap Date Preset Chips:** Instant `[ Today ]` and `[ Yesterday ]` pills on all forms to bypass slow native calendar scroll wheels.
+- **Multi-Bed Batch Selection:** Checkbox list allowing batch irrigation/spraying logs across multiple selected beds simultaneously.
+- **Enlarged Touch Targets ($\ge 48\text{px}$):** Sized for gloved or dirty hands in the field.
 
-**Sales**
-- Log crop sales separately from harvest
-- Fields: crop, quantity, unit (kg / ikat / bag), price per unit
-- Total revenue auto-calculated
-- No bed required — farmer thinks in crop + quantity, not per bed
+### 3. Task Management & 1-Tap Execution
+- **Today's Tasks:** Compact glance list on the Home screen showing scheduled chores for the day.
+- **1-Tap `⚡ Done` Action:** Workers can mark tasks complete directly from the card with a single tap, or execute the matching activity to auto-check the task off.
+- **Plan Tab:** Day-grouped forward schedule for the upcoming week, plus overdue tracking.
 
-**Formulas**
-- Spray and fertigation recipes managed directly in the app
-- Add, edit, and delete formulas from your phone — no Sheets access needed
-- Color-coded category tags (fixed preset palette) so formulas sharing a category are visually consistent
-- Single sprayer volume input (default 16L) recalculates all recipe doses instantly
-- Formula picker in the log form — tap a recipe to auto-fill ingredients and amounts into inputs/notes
+### 4. Spray Formulas & Dosage Calculator
+- **Zero-Accordion Quick Formulas:** Horizontal swipeable formula chips inside the log sheet. Tapping a recipe instantly calculates dosages and auto-fills inputs.
+- **Multi-Tank Volume Scaling:** Enter total sprayer volume (e.g. `16L`, `20L`, or `2x 16L = 32L`) to scale all ingredient measurements dynamically.
+- **8 Standard Agricultural Presets:** Built-in recipes for *Bio-Botanical Pest Shield (Bio Botava + Garlic Oil)*, *Amino 18 Foliar Mix*, *Wira CalBo Bloom Set*, *Antracol Protective Spray*, *Abamectin Mite Knockdown*, and more.
+- **In-App Recipe Manager:** Create, color-code, edit, and delete custom formulas on your phone.
 
-**Plan & Today's Tasks**
-- A manager can schedule dated, bed-specific tasks (time slot, optional Formula link) remotely — the worker opens the app and sees what's planned
-- Today's Tasks on Home: a compact glance list of what's due today
-- Plan tab: day-grouped view of the coming week, plus Overdue (past, not done) and beyond-week groups so nothing planned silently disappears
-- Logging the matching real activity auto-checks a pending task off — no separate manual tap
+### 5. Harvest, Sales & Unit Economics
+- **Separated Harvest & Sales:** Physical harvest logging (with optional kg weights) is separated from sales transactions.
+- **Crop Sales Logger:** Supports custom commercial units (`kg`, `ikat`, `bag`) with real-time revenue calculations (`RM total`).
+- **Crop P&L & Cost-Per-Kg:** Automatic cost allocation across intercropped beds, calculating true net profit and cost-per-kg once harvest weights are recorded.
+- **Full CSV Activity Export:** Export full date-grouped logs and sales to CSV.
 
-**Weather**
-- 4-day forecast for the farm's exact coordinates (Open-Meteo, no backend needed)
-- A plain "water today or skip it" call based on today's and tomorrow's rain chance
-- Ties into the bed watering alert when rain is likely and a bed is flagged
-
-**Financial Summary & Profit by Crop**
-- Revenue, cost, and net shown on the Activity tab (toggle week/month)
-- Profit by Crop: all-time revenue/cost/net per crop, splitting cost evenly across intercropped beds, with cost-per-kg once harvest weight is logged
-
-**Activity Log**
-- All logs and sales merged into a single feed, grouped by date
-- Filter by bed, plot, or activity type
-- CSV export of the full activity history
-
-**Security**
-- Shared farm PIN gates the whole backend (a soft deterrent, not real auth — appropriate for a single-farm, single-PIN app). Entered once via a prompt, cached on-device.
-
-**Offline & Sync**
-- All actions saved to a local queue first, synced to Google Sheets via Apps Script when online
-- Deletes are soft (a status flip, not row removal) so an accidental delete in the field isn't unrecoverable
-- Cache-first Service Worker — app loads instantly with no signal
-- Tap the sync status badge to retry or clear a stuck offline queue
-- Update banner appears when a new version deploys
+### 6. Weather Forecast & Coordinates
+- **Exact Coordinates:** Configured for farm coordinates `6°49'42.5"N, 116°45'56.8"E` (`6.828472, 116.765778`) in Kudat, Sabah (Timezone: `Asia/Kuching` / GMT+8).
+- **Open-Meteo Integration:** 4-day forecast for temperature, precipitation probability, and weather codes without requiring an API key.
 
 ---
 
-## Testing
+## 🛠️ Architecture & Stack
 
-`test.html` is a zero-dependency regression suite — open it directly in a browser, no build step, no npm. It mocks `fetch`/`prompt` before the app loads and isolates `localStorage`, so it never touches real farm data. Covers the pure logic functions: date normalization, watering-alert decisions, crop P&L math, the dosage calculator, plot membership, and more. Run it after any change to logic in `js/`.
-
----
-
-## Stack
-
-- Vanilla JS (Native ES Modules) + CSS — no framework, no build step
-- Service Worker (cache-first, offline queue)
-- IndexedDB & Firestore persistence with localStorage fallback
-- Firebase Cloud Firestore backend
-
----
-
-## Google Sheets Structure
-
-Create a Google Spreadsheet with these sheets and exact camelCase headers:
-
-| Sheet | Headers |
-|---|---|
-| Beds | bedNumber, location, status, name, plotId |
-| Batches | id, bedNumber, cropName, location, plantingDate, status, harvestDate |
-| Logs | id, date, bedNumber, activityCategory, cropName, inputsUsed, costRM, revenueRM, weight, status |
-| Formulas | id, name, category, description, recipe |
-| Sales | id, date, crop, quantity, unit, pricePerUnit, totalRevenue, status |
-| Tasks | id, date, timeSlot, bedNumber, activityCategory, formulaId, note, status |
-| Plots | id, name, status |
-
-`status` columns: blank/`"active"` = active, `"done"` = completed (Tasks only), `"deleted"`/`"retired"` = soft-deleted.
-
-**Formula recipe format:** pipe-separated `name:amount:unit` per ingredient
 ```
-EM4:10:ml|Antracol:2:g
+KabunFarm/
+├── index.html          # Main HTML structure with bottom sheet modals
+├── style.css           # Vanilla CSS (design system, tokens, bottom sheets)
+├── sw.js               # Cache-first Service Worker for offline PWA
+├── test.html           # Zero-dependency browser regression test suite
+└── js/
+    ├── state.js        # State store, date utilities, constants, color maps
+    ├── calculations.js # Pure agricultural math (watering engine, dilution, P&L)
+    ├── db.js           # Firestore SDK persistence, offline queues, CRUD operations
+    ├── views.js        # DOM template renderers (cards, grid, chips, filters)
+    └── app.js          # Main app controller, modal flows, window bridge
 ```
-Amounts are per litre — the app multiplies by sprayer volume.
 
-> **Note:** The `id` column in the Formulas sheet is required for add/edit/delete to work. Populate existing rows with unique values (e.g. `f1`, `f2`, ...).
-
----
-
-## Deploying Your Own
-
-1. Fork this repo
-2. Set up the Google Spreadsheet with the sheets and headers above
-3. Copy the latest `appsscript_vNN.js` code into a new Apps Script project bound to the spreadsheet
-4. In Apps Script → Project Settings → Script Properties, add `FARM_PIN` with a PIN of your choice
-5. Deploy the Apps Script as a web app (execute as me, anyone can access)
-6. Copy the deployment URL into `app.js`:
-   ```js
-   const GOOGLE_SCRIPT_URL = "your_apps_script_url_here";
-   ```
-7. Update `FARM_LAT`/`FARM_LON` in `js/state.js` to your farm's coordinates (used for the weather forecast)
-8. Enable GitHub Pages on the `master` branch
-9. Open the app on your phone and add it to your home screen
-
-**Upgrading an existing deployment:** always edit the existing Apps Script deployment in place and redeploy — never create a new one, or the URL (and everything pointing at it) breaks.
+- **Runtime:** Pure Vanilla JS (Native ES Modules) + Vanilla CSS — **Zero build step, zero bundling dependencies**.
+- **Database:** Firebase Cloud Firestore with bundled local compat SDK (`scripts/firebase-*-compat.js`) for reliable offline initialization.
+- **Offline Reliability:** Service Worker cache-first shell + IndexedDB/Firestore local cache.
+- **Security:** Farm-level PIN access control.
 
 ---
 
-## Apps Script Actions
+## 🧪 Testing & Verification
 
-**doGet**
-- `?action=getBeds` — beds with active crops, crop history, last activity, watering status (blends whole-farm and plot-scoped watering), and plot membership
-- `?action=getLogs` — all logs sorted newest first
-- `?action=getFormulas` — all formulas
-- `?action=getSales` — all sales sorted newest first
-- `?action=getTasks` — all tasks sorted soonest first
-- `?action=getPlots` — all active plots
+Open `test.html` directly in any web browser — no local server or npm install required.
 
-**doPost**
-- `addLog`, `addBed`, `updateBed`, `deleteBed`
-- `addBatch`, `updateBatch`, `deleteLog`
-- `addSale`, `deleteSale`
-- `addFormula`, `updateFormula`, `deleteFormula`
-- `addTask`, `updateTaskStatus`, `deleteTask`
-- `addPlot`, `renamePlot`, `deletePlot`, `assignBedsToPlot` (bulk), `setBedPlot` (single bed), `removeBedFromPlot`
-
-All actions require a `token` matching the `FARM_PIN` Script Property (`?token=` on GET, in the JSON body on POST).
+The regression suite contains **78 pure-function assertions** covering:
+- Date recovery from UTC ISO timestamps across month boundaries
+- 3-Way watering logic (whole-farm vs plot vs bed priority and multi-day gaps)
+- Fallow bed watering exclusion
+- Multi-ingredient recipe parsing and extreme sprayer tank scaling (up to 1000L IBC)
+- Crop P&L cost sharing, decimal rounding, and negative margin calculations
+- Sequential bed gap-finding (`findNextAvailableBedNumber`), custom bed IDs, and bed restoration
 
 ---
 
-## What's Next
+## 🧭 Improvement Roadmap
 
-Feature ideas are prioritized against a simple filter: does it serve *this one farm, one manager, this week* — or is it solving a hypothetical bigger problem? See the [full roadmap](https://claude.ai/code/artifact/6d916e9a-bead-4f95-88f5-817276229466) for what's built, what's next, and why a few ideas (multi-user accounts, perennial crop tracking) were deliberately parked rather than built.
+### ✅ Tier 1: Readability, Touch Targets & Modularity (Done)
+- High-contrast sunlight palette, 1-tap date preset pills, $\ge 48\text{px}$ touch targets, modular ES architecture.
+
+### ✅ Tier 2: Mobile Ergonomics & Field Speed (Done)
+- Numeric keypad optimization (`inputmode="decimal"`), sprayer tank steppers, bottom sheet modals, 2-column bed grid view, zero-accordion formula chips, 1-tap task execution, multi-bed batch logging.
+
+### 🔮 Tier 3: Operational Intelligence & Advanced Polish (Upcoming)
+1. **Optimal Spray Window Advisory:** Weather-driven foliar spray window evaluator using Open-Meteo hourly temp, wind, and rain risk.
+2. **Crop Growth Stage Progress Bars:** Visual benchmarks on bed cards (e.g. *"Day 22 / Est. 65d · 34% (Vegetative)"*).
+3. **Visual Offline Sync Queue Counter:** Header badge showing exact count of unsynced writes in offline queue (`⏳ 3 Pending Sync`).
 
 ---
 
-## Context
-
-Built for a single commercial vegetable farm in Kudat, Sabah. Units (ikat, bag) and workflows (end-of-day sales logging, spray formula calculator) are specific to this farm's operation. Harvest and sales are intentionally separate — the farmer harvests physically, then sells later, sometimes split across multiple buyers.
+## 📜 License
+Internal commercial farm management system — Kabun Farm, Kudat, Sabah.
