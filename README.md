@@ -118,7 +118,7 @@ Amounts are per litre — the app multiplies by sprayer volume.
    ```js
    const GOOGLE_SCRIPT_URL = "your_apps_script_url_here";
    ```
-7. Update `FARM_LAT`/`FARM_LON` in `app.js` to your farm's coordinates (used for the weather forecast)
+7. Update `FARM_LAT`/`FARM_LON` in `js/state.js` to your farm's coordinates (used for the weather forecast)
 8. Enable GitHub Pages on the `master` branch
 9. Open the app on your phone and add it to your home screen
 

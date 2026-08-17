@@ -16,9 +16,9 @@ export const WEATHER_CACHE_KEY  = "farmlog_weather_cache";
 export const TASKS_CACHE_KEY    = "farmlog_tasks_cache";
 export const PLOTS_CACHE_KEY    = "farmlog_plots_cache";
 
-// Kudat, Sabah — farm coordinates
-export const FARM_LAT = 6.887;
-export const FARM_LON = 116.825;
+// Kudat, Sabah — farm coordinates (6°49'42.5"N 116°45'56.8"E)
+export const FARM_LAT = 6.828472;
+export const FARM_LON = 116.765778;
 export const WEATHER_URL = `https://api.open-meteo.com/v1/forecast?latitude=${FARM_LAT}&longitude=${FARM_LON}&timezone=auto&current=temperature_2m,weather_code&daily=precipitation_probability_max,weather_code&forecast_days=4`;
 
 export const CATEGORY_COLOR_PALETTE = [
