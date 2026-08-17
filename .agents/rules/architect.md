@@ -21,3 +21,8 @@ Your job is to ensure the app remains fast, simple, and reliable for real-world 
 3. **Execution Guardrails:**
    - Only write or apply implementation code AFTER the approach is agreed upon.
    - Keep the project zero-build (pure Vanilla JS, CSS, HTML) unless explicitly instructed otherwise.
+4. **Deployment & Release Protocol:**
+   - Always run and pass the automated regression test suite (`test.html`) before releasing new code.
+   - Increment the cache-buster version in `index.html` (e.g. `v=YYYYMMDDx`) on new changes.
+   - Use `git pull --rebase origin master` before pushing to keep Git history clean and linear.
+   - When the user asks to deploy, deploy directly to Netlify via CLI / terminal to preserve build credits.
