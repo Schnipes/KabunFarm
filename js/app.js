@@ -1087,12 +1087,13 @@ export function openFormulaModal(index = null) {
     document.getElementById("formulaSubmitBtn").textContent  = isEdit ? "Save changes" : "Save formula";
     document.getElementById("formulaName").value = formula ? formula.name : "";
     document.getElementById("formulaCategory").value = formula ? (formula.category || "") : "";
-    document.getElementById("formulaDesc").value = formula ? (formula.description || "") : "";
+    const descEl = document.getElementById("formulaDesc") || document.getElementById("formulaDescription");
+    if (descEl) descEl.value = formula ? (formula.description || "") : "";
     document.getElementById("formulaName")?.classList.remove("invalid");
 
     renderCategorySwatchPicker(formula ? formula.category : "");
 
-    const ingList = document.getElementById("ingredientList");
+    const ingList = document.getElementById("ingredientList") || document.getElementById("ingredientRows");
     if (ingList) ingList.innerHTML = "";
     if (formula && formula.recipe) {
         const parsed = parseRecipe(formula.recipe);
@@ -1124,7 +1125,7 @@ export function selectCategorySwatch(hex) {
 }
 
 export function addIngredientRow(name = "", amount = "", unit = "ml") {
-    const list = document.getElementById("ingredientList");
+    const list = document.getElementById("ingredientList") || document.getElementById("ingredientRows");
     if (!list) return;
     const row = document.createElement("div");
     row.className = "ingredient-edit-row";
@@ -1149,7 +1150,8 @@ export function handleFormulaSubmit(event) {
     }
 
     const category = document.getElementById("formulaCategory")?.value.trim();
-    const desc     = document.getElementById("formulaDesc")?.value.trim();
+    const descEl = document.getElementById("formulaDesc") || document.getElementById("formulaDescription");
+    const desc     = descEl?.value.trim() || "";
 
     if (category && state.selectedCategoryColor !== undefined) {
         const catKey = normalizeCategoryKey(category);
@@ -1162,7 +1164,8 @@ export function handleFormulaSubmit(event) {
         localStorage.setItem(CATEGORY_COLOR_KEY, JSON.stringify(map));
     }
 
-    const rows = [...document.querySelectorAll("#ingredientList .ingredient-edit-row")];
+    const ingList = document.getElementById("ingredientList") || document.getElementById("ingredientRows");
+    const rows = [...(ingList ? ingList.querySelectorAll(".ingredient-edit-row") : document.querySelectorAll(".ingredient-edit-row"))];
     const ingredients = [];
     rows.forEach(r => {
         const iName   = r.querySelector(".ing-name")?.value.trim();
