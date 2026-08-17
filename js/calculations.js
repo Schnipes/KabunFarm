@@ -254,7 +254,9 @@ export function exportActivityCsv() {
 // --- 5. Tier 3: Biological Crop Growth & Daily Momentum ---
 export const STANDARD_CROP_DAYS = {
     "kangkong": 25,
+    "kangkung": 25,
     "bayam": 25,
+    "bayam merah": 45,
     "sawi": 30,
     "pak choi": 30,
     "bok choy": 30,
@@ -272,7 +274,9 @@ export const STANDARD_CROP_DAYS = {
     "chilli": 85,
     "chili": 85,
     "cili": 85,
-    "tomato": 75
+    "tomato": 75,
+    "red amaranth": 45,
+    "green amaranth": 45
 };
 
 export function calculateCropProgress(cropName, plantingDate) {
@@ -282,7 +286,8 @@ export function calculateCropProgress(cropName, plantingDate) {
     const daysElapsed = Math.max(0, daysSince(plantingDate));
     const norm = (cropName || "").toLowerCase().trim();
     let totalDays = 40;
-    for (const [key, days] of Object.entries(STANDARD_CROP_DAYS)) {
+    // Sort keys by descending length so multi-word varieties (e.g. "bayam merah") match before base varieties ("bayam")
+    for (const [key, days] of Object.entries(STANDARD_CROP_DAYS).sort((a, b) => b[0].length - a[0].length)) {
         if (norm.includes(key)) {
             totalDays = days;
             break;

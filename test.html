@@ -954,6 +954,18 @@
     assertEqual(prog.isReady, true);
   });
 
+  test("calculateCropProgress matches specific multi-word variety over generic base", () => {
+    // Bayam Merah has 45 day cycle; base Bayam has 25 days
+    const progMerah = calculateCropProgress("Bayam Merah", daysAgoStr(20));
+    assertEqual(progMerah.totalDays, 45);
+
+    const progHijau = calculateCropProgress("Bayam Hijau", daysAgoStr(20));
+    assertEqual(progHijau.totalDays, 25);
+
+    const progKangkung = calculateCropProgress("Kangkung Manis", daysAgoStr(10));
+    assertEqual(progKangkung.totalDays, 25);
+  });
+
   test("calculateCropProgress defaults to 40 days for unknown specialty crop", () => {
     const prog = calculateCropProgress("Exotic Herb", daysAgoStr(20));
     assertEqual(prog.totalDays, 40);
