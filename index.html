@@ -468,8 +468,9 @@
           <div class="field-label-row">
             <label for="taskDate">Date</label>
             <div class="date-preset-pills" id="taskDatePills">
-              <button type="button" class="date-pill-btn active" onclick="setDatePreset('taskDate', 0, this)">Today</button>
-              <button type="button" class="date-pill-btn" onclick="setDatePreset('taskDate', 1, this)">Yesterday</button>
+              <button type="button" class="date-pill-btn active" onclick="setDatePreset('taskDate', 0, this, true)">Today</button>
+              <button type="button" class="date-pill-btn" onclick="setDatePreset('taskDate', 1, this, true)">Tomorrow</button>
+              <button type="button" class="date-pill-btn" onclick="setDatePreset('taskDate', 2, this, true)">+2 Days</button>
             </div>
           </div>
           <input type="date" id="taskDate" required onchange="syncDatePresets('taskDate')">
@@ -679,6 +680,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="js/app.js?v=20260817b"></script>
+  <script type="module" src="js/app.js?v=20260817c"></script>
 </body>
 </html>

@@ -151,9 +151,13 @@ export function setFinPeriod(period) {
 }
 
 // --- 2. 1-Tap Date Presets ---
-export function setDatePreset(inputId, offsetDays, btnElement) {
+export function setDatePreset(inputId, offsetDays, btnElement, isFuture = false) {
     const d = new Date();
-    d.setDate(d.getDate() - offsetDays);
+    if (isFuture) {
+        d.setDate(d.getDate() + offsetDays);
+    } else {
+        d.setDate(d.getDate() - offsetDays);
+    }
     const dateVal = localDateStr(d);
     const input = document.getElementById(inputId);
     if (input) {
@@ -180,6 +184,14 @@ export function syncDatePresets(inputId) {
     dYesterday.setDate(dYesterday.getDate() - 1);
     const yesterdayVal = localDateStr(dYesterday);
 
+    const dTomorrow = new Date();
+    dTomorrow.setDate(dTomorrow.getDate() + 1);
+    const tomorrowVal = localDateStr(dTomorrow);
+
+    const dIn2Days = new Date();
+    dIn2Days.setDate(dIn2Days.getDate() + 2);
+    const in2DaysVal = localDateStr(dIn2Days);
+
     const buttons = container.querySelectorAll(".date-pill-btn");
     buttons.forEach(btn => {
         const text = btn.textContent.trim().toLowerCase();
@@ -187,6 +199,10 @@ export function syncDatePresets(inputId) {
             btn.classList.toggle("active", currentVal === todayVal);
         } else if (text === "yesterday") {
             btn.classList.toggle("active", currentVal === yesterdayVal);
+        } else if (text === "tomorrow") {
+            btn.classList.toggle("active", currentVal === tomorrowVal);
+        } else if (text.includes("2 days") || text.includes("+2")) {
+            btn.classList.toggle("active", currentVal === in2DaysVal);
         } else {
             btn.classList.remove("active");
         }
@@ -861,6 +877,31 @@ export function toggleTaskDone(taskId) {
     }
 }
 
+export function deleteTask(taskId, event) {
+    if (event) event.stopPropagation();
+    const task = (state.tasksData || []).find(t => String(t.id) === String(taskId));
+    if (!task) return;
+    const formula = task.formulaId ? state.formulasData.find(f => String(f.id) === String(task.formulaId)) : null;
+    const title = formula ? formula.name : (task.note || "Task");
+    if (!confirm(`Delete task "${title}"?`)) return;
+
+    state.tasksData = state.tasksData.filter(t => String(t.id) !== String(taskId));
+    localStorage.setItem(TASKS_CACHE_KEY, JSON.stringify(state.tasksData));
+    renderPlanView();
+    renderTodayTasks();
+
+    const firestore = getDb();
+    if (firestore) {
+        firestore.collection("tasks").doc(String(taskId)).update({ status: "deleted" }).catch(e => console.error("deleteTask error:", e));
+    }
+    showToast(`Task "${title}" deleted`);
+}
+
+export function toggleCompletedTasks() {
+    state.showCompletedTasks = !state.showCompletedTasks;
+    renderPlanView();
+}
+
 export async function executeTaskNow(taskId, event) {
     if (event) event.stopPropagation();
     const task = state.tasksData.find(t => String(t.id) === String(taskId));
@@ -1456,6 +1497,8 @@ if (typeof window !== "undefined") {
         selectTaskFormula,
         handleTaskSubmit,
         toggleTaskDone,
+        deleteTask,
+        toggleCompletedTasks,
         executeTaskNow,
 
         // Formulas & Stepper

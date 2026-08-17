@@ -14,6 +14,7 @@ import {
     CATEGORY_COLOR_PALETTE,
     escapeHtml,
     ymd,
+    localDateStr,
     todayString,
     daysSince,
     shortDate,
@@ -528,29 +529,34 @@ export function updateQuickFormulaDosePreview() {
 
 // --- 6. Task & Plan View Renderers ---
 export function planDayLabel(dateStr) {
+    if (!dateStr) return "";
     const today = todayString();
-    const d = new Date(); d.setDate(d.getDate() + 1);
-    const tomorrow = ymd(d.toISOString());
+    const dTomorrow = new Date();
+    dTomorrow.setDate(dTomorrow.getDate() + 1);
+    const tomorrow = localDateStr(dTomorrow);
+
     if (dateStr === today)    return "Today · "    + shortDate(dateStr);
     if (dateStr === tomorrow) return "Tomorrow · " + shortDate(dateStr);
-    const dayName = new Date(dateStr + "T00:00:00").toLocaleDateString("en-MY", { weekday: "long" });
-    return `${dayName} · ${shortDate(dateStr)}`;
+    const d = new Date(dateStr + "T00:00:00");
+    const dayName = !isNaN(d.getTime()) ? d.toLocaleDateString("en-MY", { weekday: "long" }) : "";
+    return dayName ? `${dayName} · ${shortDate(dateStr)}` : shortDate(dateStr);
 }
 
 export function renderTaskCard(task) {
     const formula = task.formulaId ? state.formulasData.find(f => String(f.id) === String(task.formulaId)) : null;
     const isDone  = task.status === "done";
-    const color   = formula ? getCategoryColor(formula.category) : null;
+    const categoryName = (formula && formula.category) || task.activityCategory;
+    const color   = categoryName ? getCategoryColor(categoryName) : null;
     const tag     = formula && formula.category
         ? `<span class="tag"${color ? ` style="${tintStyle(color)}"` : ""}>${escapeHtml(formula.category)}</span>`
-        : "";
+        : (task.activityCategory ? `<span class="tag">${escapeHtml(task.activityCategory)}</span>` : "");
     const slotPill = task.timeSlot && task.timeSlot !== "Anytime"
         ? `<span class="slot-pill">${escapeHtml(task.timeSlot)}</span>` : "";
 
-    const title = formula ? formula.name : "Task";
+    const title = formula ? formula.name : (task.note || "Task");
     const descParts = [];
     if (formula && formula.description) descParts.push(formula.description);
-    if (task.note) descParts.push(task.note);
+    if (formula && task.note) descParts.push(task.note);
     const desc = descParts.join(" — ");
     const scopeMeta = resolveTaskScopeMeta(task);
     const bedLine = `<p class="task-bed">${escapeHtml(scopeMeta)}</p>`;
@@ -559,11 +565,16 @@ export function renderTaskCard(task) {
             ⚡ Log &amp; Mark Done
         </button>` : "";
 
+    const borderStyle = color ? ` style="border-left-color:${color};"` : "";
+
     return `
-    <div class="task-card">
-        <button class="task-check${isDone ? " done" : ""}" onclick="toggleTaskDone('${escapeHtml(String(task.id))}')">${isDone ? "✓" : ""}</button>
+    <div class="task-card${isDone ? " is-done" : ""}"${borderStyle}>
+        <button class="task-check${isDone ? " done" : ""}" onclick="toggleTaskDone('${escapeHtml(String(task.id))}')" aria-label="Toggle task">${isDone ? "✓" : ""}</button>
         <div class="task-main">
-            <div class="task-top-row">${slotPill}${tag}</div>
+            <div class="task-top-row">
+                <div class="task-top-left">${slotPill}${tag}</div>
+                <button type="button" class="task-delete-btn" onclick="deleteTask('${escapeHtml(String(task.id))}', event)" aria-label="Delete task">🗑️</button>
+            </div>
             <p class="task-title${isDone ? " done-text" : ""}">${escapeHtml(title)}</p>
             ${desc ? `<p class="task-desc">${escapeHtml(desc)}</p>` : ""}
             ${bedLine}
@@ -575,7 +586,8 @@ export function renderTaskCard(task) {
 export function renderTodayTaskRow(task) {
     const formula = task.formulaId ? state.formulasData.find(f => String(f.id) === String(task.formulaId)) : null;
     const isDone  = task.status === "done";
-    const color   = formula ? getCategoryColor(formula.category) : null;
+    const categoryName = (formula && formula.category) || task.activityCategory;
+    const color   = categoryName ? getCategoryColor(categoryName) : null;
     const icon    = CATEGORY_ICON[task.activityCategory] || "📝";
     const title   = formula ? formula.name : (task.note || "Task");
     const bedMeta = resolveTaskScopeMeta(task);
@@ -603,8 +615,8 @@ export function renderTodayTasks() {
     if (dateLabel) dateLabel.textContent = shortDate(todayString());
 
     const today = todayString();
-    const todays = state.tasksData
-        .filter(t => t.date === today)
+    const todays = (state.tasksData || [])
+        .filter(t => t.date === today && t.status !== "deleted")
         .sort((a, b) => (TIME_SLOT_ORDER[a.timeSlot] ?? 3) - (TIME_SLOT_ORDER[b.timeSlot] ?? 3))
         .sort((a, b) => (a.status === "done" ? 1 : 0) - (b.status === "done" ? 1 : 0));
 
@@ -619,47 +631,93 @@ export function renderPlanView() {
     const container = document.getElementById("planTaskList");
     if (!container) return;
 
-    const start = new Date(); start.setHours(0, 0, 0, 0);
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-        const d = new Date(start); d.setDate(start.getDate() + i);
-        days.push(ymd(d.toISOString()));
+    const allTasks = (state.tasksData || []).filter(t => t.status !== "deleted");
+
+    if (!allTasks.length) {
+        container.innerHTML = `
+        <div class="plan-empty-state">
+            <span class="plan-empty-icon">🗓️</span>
+            <p class="plan-empty-title">No tasks planned</p>
+            <p class="plan-empty-hint">Schedule upcoming chores, spray recipes, or irrigation routines.</p>
+            <button type="button" class="add-bed-btn" onclick="openTaskModal()">+ Add your first task</button>
+        </div>`;
+        return;
     }
-    const today   = days[0];
-    const lastDay = days[6];
 
-    const byDate = {};
-    state.tasksData.forEach(t => {
-        if (!byDate[t.date]) byDate[t.date] = [];
-        byDate[t.date].push(t);
-    });
-
+    const today = todayString();
     const slotSort = (a, b) => (TIME_SLOT_ORDER[a.timeSlot] ?? 3) - (TIME_SLOT_ORDER[b.timeSlot] ?? 3);
 
-    const overdueDates = Object.keys(byDate)
-        .filter(d => d && d < today && byDate[d].some(t => t.status !== "done"))
-        .sort();
-    const overdueHtml = overdueDates.map(dateStr => {
-        const pending = byDate[dateStr].filter(t => t.status !== "done").sort(slotSort);
-        return `<div class="day-heading overdue-heading">Overdue · ${planDayLabel(dateStr)}</div>`
-            + pending.map(renderTaskCard).join("");
-    }).join("");
+    const overdueTasks = allTasks.filter(t => t.date < today && t.status !== "done");
+    const todayTasks   = allTasks.filter(t => t.date === today && t.status !== "done");
+    const upcomingTasks = allTasks.filter(t => t.date > today && t.status !== "done");
+    const completedTasks = allTasks.filter(t => t.status === "done");
 
-    const weekHtml = days.map(dateStr => {
-        const dayTasks = (byDate[dateStr] || []).slice().sort(slotSort);
-        const heading = `<div class="day-heading">${planDayLabel(dateStr)}</div>`;
-        if (!dayTasks.length) return heading + `<div class="empty-day">Nothing planned</div>`;
-        return heading + dayTasks.map(renderTaskCard).join("");
-    }).join("");
+    let html = "";
 
-    const laterDates = Object.keys(byDate).filter(d => d > lastDay).sort();
-    const laterHtml = laterDates.map(dateStr => {
-        const dayTasks = byDate[dateStr].slice().sort(slotSort);
-        return `<div class="day-heading">${planDayLabel(dateStr)}</div>`
-            + dayTasks.map(renderTaskCard).join("");
-    }).join("");
+    // 1. Overdue section (past pending tasks)
+    if (overdueTasks.length) {
+        const overdueByDate = {};
+        overdueTasks.forEach(t => {
+            if (!overdueByDate[t.date]) overdueByDate[t.date] = [];
+            overdueByDate[t.date].push(t);
+        });
+        const overdueDates = Object.keys(overdueByDate).sort();
+        overdueDates.forEach(dStr => {
+            const dayPending = overdueByDate[dStr].slice().sort(slotSort);
+            html += `<div class="day-heading overdue-heading">🚨 Overdue · ${planDayLabel(dStr)} (${dayPending.length})</div>`
+                + dayPending.map(renderTaskCard).join("");
+        });
+    }
 
-    container.innerHTML = overdueHtml + weekHtml + laterHtml;
+    // 2. Today's active tasks
+    if (todayTasks.length) {
+        const sortedToday = todayTasks.slice().sort(slotSort);
+        html += `<div class="day-heading">📅 ${planDayLabel(today)} (${sortedToday.length})</div>`
+            + sortedToday.map(renderTaskCard).join("");
+    }
+
+    // 3. Upcoming active tasks (only days with tasks)
+    if (upcomingTasks.length) {
+        const upcomingByDate = {};
+        upcomingTasks.forEach(t => {
+            if (!upcomingByDate[t.date]) upcomingByDate[t.date] = [];
+            upcomingByDate[t.date].push(t);
+        });
+        const upcomingDates = Object.keys(upcomingByDate).sort();
+        upcomingDates.forEach(dStr => {
+            const dayUpcoming = upcomingByDate[dStr].slice().sort(slotSort);
+            html += `<div class="day-heading">🗓️ ${planDayLabel(dStr)} (${dayUpcoming.length})</div>`
+                + dayUpcoming.map(renderTaskCard).join("");
+        });
+    }
+
+    // If no active tasks remaining (all done)
+    if (!overdueTasks.length && !todayTasks.length && !upcomingTasks.length && completedTasks.length) {
+        html += `
+        <div class="plan-empty-state" style="padding:22px 16px;margin-bottom:18px;">
+            <span class="plan-empty-icon">🎉</span>
+            <p class="plan-empty-title">All tasks completed!</p>
+            <p class="plan-empty-hint">Everything scheduled has been checked off.</p>
+            <button type="button" class="add-bed-btn" onclick="openTaskModal()">+ Schedule next task</button>
+        </div>`;
+    }
+
+    // 4. Collapsible Completed Tasks section
+    if (completedTasks.length) {
+        const isOpen = state.showCompletedTasks;
+        html += `
+        <div class="completed-tasks-wrapper">
+            <button type="button" class="completed-tasks-toggle" onclick="toggleCompletedTasks()">
+                <span>📁 Completed Tasks (${completedTasks.length})</span>
+                <span id="completedTasksChevron">${isOpen ? "▴" : "▾"}</span>
+            </button>
+            <div id="completedTasksList"${isOpen ? "" : " hidden"}>
+                ${completedTasks.map(renderTaskCard).join("")}
+            </div>
+        </div>`;
+    }
+
+    container.innerHTML = html;
 }
 
 export function populateTaskFormulaList() {

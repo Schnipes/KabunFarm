@@ -125,8 +125,8 @@
   // Re-expose to local test scope
   const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber } = State;
   const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal } = Calc;
-  const { planDayLabel } = Views;
-  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, toggleBedFallow, restoreBed, deleteBed, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
+  const { planDayLabel, renderTaskCard } = Views;
+  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, toggleBedFallow, restoreBed, deleteBed, deleteTask, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
   // We no longer shadow the global state with 'let' variables.
@@ -851,6 +851,84 @@
     assertEqual(State.state.bedsData.length, 2);
     assertEqual(getBed(2).status, "active");
     assertEqual(State.state.archivedBedsData.length, 0);
+  });
+
+  // ---------------------------------------------------------------------
+  group("Field-First Planning & Task Agenda");
+
+  test("planDayLabel correctly labels Today, Tomorrow, and weekday", () => {
+    const today = todayString();
+    const dTomorrow = new Date();
+    dTomorrow.setDate(dTomorrow.getDate() + 1);
+    const tomorrow = localDateStr(dTomorrow);
+
+    assertTrue(planDayLabel(today).startsWith("Today · "));
+    assertTrue(planDayLabel(tomorrow).startsWith("Tomorrow · "));
+    assertTrue(planDayLabel("2026-12-25").includes("Friday · 25 Dec"));
+  });
+
+  test("renderTaskCard displays task note as title when no formula is linked", () => {
+    State.state.formulasData = [];
+    const task = {
+      id: "t_custom",
+      date: todayString(),
+      note: "Repair perimeter fence valve",
+      status: "active",
+      activityCategory: "watering"
+    };
+    const html = renderTaskCard(task);
+    assertTrue(html.includes("Repair perimeter fence valve"), "Card should display custom note");
+    assertTrue(html.includes("task-title"), "Card should have task-title element");
+    assertTrue(html.includes("task-delete-btn"), "Card should have delete button");
+  });
+
+  test("renderTaskCard displays formula name when linked", () => {
+    State.state.formulasData = [{ id: "f1", name: "EM4 Foliar Spray", category: "Microbial", description: "Soil probiotic" }];
+    const task = {
+      id: "t_formula",
+      date: todayString(),
+      formulaId: "f1",
+      note: "Apply on Bed 3",
+      status: "active"
+    };
+    const html = renderTaskCard(task);
+    assertTrue(html.includes("EM4 Foliar Spray"), "Card should display formula name");
+    assertTrue(html.includes("Apply on Bed 3"), "Card should display additional note");
+  });
+
+  test("setDatePreset with isFuture=true sets tomorrow and +2 days", () => {
+    const mockInput = document.createElement("input");
+    mockInput.id = "testFutureDate";
+    document.body.appendChild(mockInput);
+
+    setDatePreset("testFutureDate", 1, null, true);
+    const dTomorrow = new Date();
+    dTomorrow.setDate(dTomorrow.getDate() + 1);
+    assertEqual(mockInput.value, localDateStr(dTomorrow));
+
+    setDatePreset("testFutureDate", 2, null, true);
+    const dIn2Days = new Date();
+    dIn2Days.setDate(dIn2Days.getDate() + 2);
+    assertEqual(mockInput.value, localDateStr(dIn2Days));
+
+    mockInput.remove();
+  });
+
+  test("deleteTask removes task from state.tasksData", () => {
+    State.state.tasksData = [
+      { id: "task_1", note: "Task to keep", status: "active" },
+      { id: "task_2", note: "Task to delete", status: "active" }
+    ];
+    // Mock global confirm to return true
+    const origConfirm = window.confirm;
+    window.confirm = () => true;
+    try {
+      deleteTask("task_2");
+      assertEqual(State.state.tasksData.length, 1);
+      assertEqual(State.state.tasksData[0].id, "task_1");
+    } finally {
+      window.confirm = origConfirm;
+    }
   });
 
   // ---------------------------------------------------------------------

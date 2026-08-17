@@ -131,7 +131,8 @@ export const state = {
     editingPlotId: null,
     currentPlotId: null,
     bedDetailReturnPlotId: null,
-    archivedBedsData: []
+    archivedBedsData: [],
+    showCompletedTasks: false
 };
 
 export function findNextAvailableBedNumber(bedsList) {
