@@ -126,7 +126,7 @@
   const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber, LOGS_CACHE_KEY } = State;
   const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal, calculateCropProgress, calculateDailyMomentum, evaluateSprayWindow } = Calc;
   const { planDayLabel, renderTaskCard, renderFarmMomentum, formatBedRange, renderPlotCard } = Views;
-  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, editPlantingDate, togglePlotExpand, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
+  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, editPlantingDate, togglePlotExpand, openFormulaModal, addIngredientRow, handleFormulaSubmit, deleteFormula, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
   // We no longer shadow the global state with 'let' variables.
@@ -1067,6 +1067,19 @@
     assertEqual(State.state.expandedPlots["plot_eggplant"], true);
     togglePlotExpand("plot_eggplant");
     assertEqual(State.state.expandedPlots["plot_eggplant"], false);
+  });
+
+  test("formula recipe parses and formats multi-ingredient dosages correctly", () => {
+    const raw = "Bio Botava:2.5:ml|Garlic Oil:2:ml";
+    const ingredients = parseRecipe(raw);
+    assertEqual(ingredients.length, 2);
+    assertEqual(ingredients[0].name, "Bio Botava");
+    assertEqual(ingredients[0].amount, 2.5);
+    assertEqual(ingredients[0].unit, "ml");
+
+    // Re-serialize back to recipe format
+    const serialized = ingredients.map(i => `${i.name}:${i.amount}:${i.unit}`).join("|");
+    assertEqual(serialized, raw);
   });
 
   // ---------------------------------------------------------------------
