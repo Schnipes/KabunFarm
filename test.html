@@ -97,6 +97,15 @@
   <input id="taskNote">
   <input type="checkbox" id="taskRepeat">
   <select id="taskActivityCategory"></select>
+  <div id="formulaModalOverlay"></div>
+  <div id="formulaModalTitle"></div>
+  <button id="formulaSubmitBtn"></button>
+  <input id="formulaName">
+  <input id="formulaCategory">
+  <div id="categorySwatchPicker"></div>
+  <input id="formulaDesc">
+  <div id="ingredientList"></div>
+  <div id="formulaList"></div>
   <main></main>
 </div>
 
@@ -1080,6 +1089,25 @@
     // Re-serialize back to recipe format
     const serialized = ingredients.map(i => `${i.name}:${i.amount}:${i.unit}`).join("|");
     assertEqual(serialized, raw);
+  });
+
+  test("openFormulaModal, addIngredientRow, and handleFormulaSubmit creates and updates formula end-to-end", () => {
+    State.state.formulasData = [
+      { id: "f_1", name: "Old Mix", category: "Nutrition", description: "Old desc", recipe: "Amino 18:2:ml", status: "active" }
+    ];
+    openFormulaModal(0);
+    assertEqual(document.getElementById("formulaName").value, "Old Mix");
+    assertEqual(document.getElementById("formulaDesc").value, "Old desc");
+
+    // Modify name & add new ingredient
+    document.getElementById("formulaName").value = "Updated Mix";
+    addIngredientRow("Neem Oil", 3.5, "ml");
+
+    handleFormulaSubmit();
+
+    assertEqual(State.state.formulasData[0].name, "Updated Mix");
+    assertEqual(State.state.formulasData[0].recipe, "Amino 18:2:ml|Neem Oil:3.5:ml");
+    assertEqual(State.state.editingFormulaIndex, null);
   });
 
   // ---------------------------------------------------------------------
