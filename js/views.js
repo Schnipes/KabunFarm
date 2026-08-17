@@ -188,27 +188,100 @@ export function renderFallowBedCard(bed) {
     </div>`;
 }
 
+export function formatBedRange(beds) {
+    if (!beds || !beds.length) return "";
+    const nums = beds.map(b => Number(b.bedNumber)).filter(n => !isNaN(n)).sort((a, b) => a - b);
+    if (!nums.length) return `${beds.length} beds`;
+    const isContiguous = nums.length > 1 && (nums[nums.length - 1] - nums[0] === nums.length - 1);
+    if (isContiguous) {
+        return `Beds ${nums[0]}–${nums[nums.length - 1]} (${beds.length} beds)`;
+    }
+    if (nums.length <= 3) {
+        return `Beds ${nums.join(", ")}`;
+    }
+    return `${beds.length} beds (${nums[0]}…${nums[nums.length - 1]})`;
+}
+
 export function renderPlotCard(plotId, beds) {
     const plot = getPlot(plotId);
     const label = plot ? plot.name : "Plot";
-    const cropNames = [...new Set(beds.flatMap(b => b.crops.map(c => c.cropName)))];
-    const chips = cropNames.length
-        ? cropNames.map(n => `<span class="tag">${escapeHtml(n)}</span>`).join("")
-        : '<span style="color:#888;font-size:13px;">Empty</span>';
+    const safePlotId = escapeHtml(String(plotId));
+    const rangeLabel = formatBedRange(beds);
+    const isExpanded = !!(state.expandedPlots && state.expandedPlots[plotId]);
+
+    // Extract unique crops and their earliest planting date
+    const cropMap = new Map();
+    beds.forEach(b => {
+        (b.crops || []).forEach(c => {
+            if (!cropMap.has(c.cropName)) {
+                cropMap.set(c.cropName, c.plantingDate);
+            } else {
+                const existing = cropMap.get(c.cropName);
+                if (c.plantingDate && (!existing || c.plantingDate < existing)) {
+                    cropMap.set(c.cropName, c.plantingDate);
+                }
+            }
+        });
+    });
+
+    let growthSectionsHtml = "";
+    if (cropMap.size > 0) {
+        growthSectionsHtml = Array.from(cropMap.entries()).map(([cropName, plantingDate]) => {
+            const prog = calculateCropProgress(cropName, plantingDate);
+            const readyClass = prog.isReady ? " is-ready" : "";
+            return `
+            <div class="plot-crop-prog-item">
+                <div class="bed-crop-row">
+                    <span style="font-weight:700;">🌱 ${escapeHtml(cropName)}</span>
+                    <span class="bed-day-badge">Day ${prog.daysElapsed}</span>
+                </div>
+                <div class="crop-growth-box">
+                    <div class="crop-growth-header">
+                        <span class="stage-pill${readyClass}">${prog.stageIcon} ${prog.stageLabel}</span>
+                        <span class="growth-pct-text">${prog.pct}% (${prog.daysLeft}d left)</span>
+                    </div>
+                    <div class="crop-growth-track">
+                        <div class="crop-growth-fill${readyClass}" style="width:${prog.pct}%;"></div>
+                    </div>
+                </div>
+            </div>`;
+        }).join("");
+    } else {
+        growthSectionsHtml = '<p class="bed-empty-label" style="margin:6px 0 0;">Ready to sow</p>';
+    }
 
     const { total, flagged } = plotWateringRollup(plotId);
-    const wateringLine = flagged
-        ? `<p class="bed-water-alert">💧 ${flagged} of ${total} beds not watered</p>`
-        : "";
+    const waterStatusBadge = flagged > 0
+        ? `<span class="plot-stat-pill warn">💧 ${flagged}/${total} unwatered</span>`
+        : `<span class="plot-stat-pill good">💧 All ${total} watered</span>`;
+
+    const numSort = (a, b) => (Number(a.bedNumber) || 0) - (Number(b.bedNumber) || 0);
+    const sortedBeds = beds.slice().sort(numSort);
+
+    const nestedBedsHtml = isExpanded ? `
+        <div class="plot-nested-beds">
+            ${sortedBeds.map(b => b.status === "fallow" ? renderFallowBedCard(b) : (b.crops && b.crops.length ? renderGrowingBedCard(b) : renderEmptyBedCard(b))).join("")}
+        </div>` : "";
 
     return `
-    <div class="batch-card bed-card-clickable" onclick="openPlotDetail('${escapeHtml(String(plotId))}')">
-        <div class="bed-card-header">
-            <p class="batch-title">${escapeHtml(label)} <span class="bed-custom-name">· ${beds.length} bed${beds.length === 1 ? "" : "s"}</span></p>
-            <span class="bed-chevron">›</span>
+    <div class="plot-super-card-wrap">
+        <div class="batch-card plot-super-card bed-card-clickable" onclick="openPlotDetail('${safePlotId}')">
+            <div class="bed-card-header">
+                <div>
+                    <p class="batch-title">🗂️ ${escapeHtml(label)}</p>
+                    <span class="plot-range-sub">${escapeHtml(rangeLabel)}</span>
+                </div>
+                <span class="bed-chevron">›</span>
+            </div>
+            ${growthSectionsHtml}
+            <div class="plot-footer-row">
+                ${waterStatusBadge}
+                <button type="button" class="plot-expand-btn${isExpanded ? ' expanded' : ''}" onclick="togglePlotExpand('${safePlotId}', event)">
+                    ${isExpanded ? '▴ Hide Beds' : `▾ Show ${beds.length} Beds`}
+                </button>
+            </div>
         </div>
-        <div class="bed-crops">${chips}</div>
-        ${wateringLine}
+        ${nestedBedsHtml}
     </div>`;
 }
 

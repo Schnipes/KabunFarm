@@ -1228,6 +1228,13 @@ export function applyFormulaFromLibrary(index) {
 }
 
 // --- 8. Plot Modal & Detail ---
+export function togglePlotExpand(plotId, event) {
+    if (event) event.stopPropagation();
+    state.expandedPlots = state.expandedPlots || {};
+    state.expandedPlots[plotId] = !state.expandedPlots[plotId];
+    renderBeds(state.bedsData);
+}
+
 export function openPlotAssignModal(plotId = null) {
     state.editingPlotId = plotId;
     const plot = plotId ? getPlot(plotId) : null;
@@ -1563,6 +1570,7 @@ if (typeof window !== "undefined") {
         handlePlotSubmit,
         openPlotDetail,
         closePlotDetail,
+        togglePlotExpand,
         openBedFromPlot,
         deletePlot,
 

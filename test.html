@@ -125,8 +125,8 @@
   // Re-expose to local test scope
   const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber, LOGS_CACHE_KEY } = State;
   const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal, calculateCropProgress, calculateDailyMomentum, evaluateSprayWindow } = Calc;
-  const { planDayLabel, renderTaskCard, renderFarmMomentum } = Views;
-  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, editPlantingDate, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
+  const { planDayLabel, renderTaskCard, renderFarmMomentum, formatBedRange, renderPlotCard } = Views;
+  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, editPlantingDate, togglePlotExpand, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
   // We no longer shadow the global state with 'let' variables.
@@ -1048,6 +1048,25 @@
     } finally {
       window.prompt = origPrompt;
     }
+  });
+
+  test("formatBedRange creates clean contiguous and non-contiguous range strings", () => {
+    const contiguous = [{ bedNumber: 1 }, { bedNumber: 2 }, { bedNumber: 3 }, { bedNumber: 4 }];
+    assertEqual(formatBedRange(contiguous), "Beds 1–4 (4 beds)");
+
+    const few = [{ bedNumber: 1 }, { bedNumber: 5 }];
+    assertEqual(formatBedRange(few), "Beds 1, 5");
+
+    const empty = [];
+    assertEqual(formatBedRange(empty), "");
+  });
+
+  test("togglePlotExpand toggles plot expansion state in state.expandedPlots", () => {
+    State.state.expandedPlots = {};
+    togglePlotExpand("plot_eggplant");
+    assertEqual(State.state.expandedPlots["plot_eggplant"], true);
+    togglePlotExpand("plot_eggplant");
+    assertEqual(State.state.expandedPlots["plot_eggplant"], false);
   });
 
   // ---------------------------------------------------------------------
