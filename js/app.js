@@ -96,6 +96,7 @@ import {
     filterLogs,
     filterByType,
     clearActivityFilters,
+    renderFormulas,
     renderCategorySwatchPicker,
     renderQuickFormulaChips,
     selectQuickFormula,
@@ -1142,66 +1143,83 @@ export function addIngredientRow(name = "", amount = "", unit = "ml") {
 }
 
 export function handleFormulaSubmit(event) {
-    event.preventDefault();
-    const name = document.getElementById("formulaName")?.value.trim();
-    if (!name) {
-        document.getElementById("formulaName")?.classList.add("invalid");
-        return;
-    }
+    if (event) event.preventDefault();
+    try {
+        const nameInput = document.getElementById("formulaName");
+        const name = nameInput?.value.trim();
+        if (!name) {
+            nameInput?.classList.add("invalid");
+            showToast("Please enter a formula name");
+            return;
+        }
+        nameInput?.classList.remove("invalid");
 
-    const category = document.getElementById("formulaCategory")?.value.trim();
-    const descEl = document.getElementById("formulaDesc") || document.getElementById("formulaDescription");
-    const desc     = descEl?.value.trim() || "";
+        const category = document.getElementById("formulaCategory")?.value.trim() || "";
+        const descEl = document.getElementById("formulaDesc") || document.getElementById("formulaDescription");
+        const desc     = descEl?.value.trim() || "";
 
-    if (category && state.selectedCategoryColor !== undefined) {
-        const catKey = normalizeCategoryKey(category);
-        const map = getCategoryColorMap();
-        if (state.selectedCategoryColor) {
-            map[catKey] = state.selectedCategoryColor;
+        if (category && state.selectedCategoryColor !== undefined) {
+            try {
+                const catKey = normalizeCategoryKey(category);
+                const map = getCategoryColorMap();
+                if (state.selectedCategoryColor) {
+                    map[catKey] = state.selectedCategoryColor;
+                } else {
+                    delete map[catKey];
+                }
+                localStorage.setItem(CATEGORY_COLOR_KEY, JSON.stringify(map));
+            } catch (e) {
+                console.warn("Category color save error:", e);
+            }
+        }
+
+        const ingList = document.getElementById("ingredientList") || document.getElementById("ingredientRows");
+        const rows = [...(ingList ? ingList.querySelectorAll(".ingredient-edit-row") : document.querySelectorAll(".ingredient-edit-row"))];
+        const ingredients = [];
+        rows.forEach(r => {
+            const iName   = r.querySelector(".ing-name")?.value.trim();
+            const iAmount = parseFloat(r.querySelector(".ing-amount")?.value);
+            const iUnit   = r.querySelector(".ing-unit")?.value || "ml";
+            if (iName && !isNaN(iAmount) && iAmount > 0) {
+                ingredients.push(`${iName}:${iAmount}:${iUnit}`);
+            }
+        });
+        const recipe = ingredients.join("|");
+
+        if (!Array.isArray(state.formulasData)) {
+            state.formulasData = [];
+        }
+
+        const isEdit = state.editingFormulaIndex !== null && state.editingFormulaIndex >= 0 && state.editingFormulaIndex < state.formulasData.length;
+        const existing = isEdit ? state.formulasData[state.editingFormulaIndex] : null;
+        const formulaId = (existing && existing.id) ? existing.id : ("f_" + Date.now());
+
+        const entry = {
+            id: formulaId,
+            name,
+            category,
+            description: desc,
+            recipe,
+            status: "active"
+        };
+
+        const firestore = getDb();
+        if (isEdit) {
+            state.formulasData[state.editingFormulaIndex] = entry;
+            if (firestore) firestore.collection("formulas").doc(formulaId).set(entry).catch(e => console.error(e));
         } else {
-            delete map[catKey];
+            state.formulasData.push(entry);
+            if (firestore) firestore.collection("formulas").doc(formulaId).set(entry).catch(e => console.error(e));
         }
-        localStorage.setItem(CATEGORY_COLOR_KEY, JSON.stringify(map));
+
+        localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(state.formulasData));
+        renderFormulas(state.formulasData);
+        closeFormulaModal();
+        showToast(isEdit ? "Formula updated" : "Formula created");
+    } catch (err) {
+        console.error("handleFormulaSubmit error:", err);
+        showToast("Error saving formula: " + err.message);
     }
-
-    const ingList = document.getElementById("ingredientList") || document.getElementById("ingredientRows");
-    const rows = [...(ingList ? ingList.querySelectorAll(".ingredient-edit-row") : document.querySelectorAll(".ingredient-edit-row"))];
-    const ingredients = [];
-    rows.forEach(r => {
-        const iName   = r.querySelector(".ing-name")?.value.trim();
-        const iAmount = parseFloat(r.querySelector(".ing-amount")?.value);
-        const iUnit   = r.querySelector(".ing-unit")?.value || "ml";
-        if (iName && !isNaN(iAmount) && iAmount > 0) {
-            ingredients.push(`${iName}:${iAmount}:${iUnit}`);
-        }
-    });
-    const recipe = ingredients.join("|");
-
-    const isEdit = state.editingFormulaIndex !== null;
-    const formulaId = isEdit ? state.formulasData[state.editingFormulaIndex].id : "f_" + Date.now();
-
-    const entry = {
-        id: formulaId,
-        name,
-        category,
-        description: desc,
-        recipe,
-        status: "active"
-    };
-
-    const firestore = getDb();
-    if (isEdit) {
-        state.formulasData[state.editingFormulaIndex] = entry;
-        if (firestore) firestore.collection("formulas").doc(formulaId).set(entry).catch(e => console.error(e));
-    } else {
-        state.formulasData.push(entry);
-        if (firestore) firestore.collection("formulas").doc(formulaId).set(entry).catch(e => console.error(e));
-    }
-
-    localStorage.setItem(FORMULAS_CACHE_KEY, JSON.stringify(state.formulasData));
-    renderFormulas(state.formulasData);
-    closeFormulaModal();
-    showToast(isEdit ? "Formula updated" : "Formula created");
 }
 
 export function deleteFormula(index) {
