@@ -42,7 +42,14 @@ An offline-first Progressive Web App (PWA) built specifically for managing and l
 - **Crop P&L & Cost-Per-Kg:** Automatic cost allocation across intercropped beds, calculating true net profit and cost-per-kg once harvest weights are recorded.
 - **Full CSV Activity Export:** Export full date-grouped logs and sales to CSV.
 
-### 6. Weather Forecast & Coordinates
+### 6. Operational Intelligence & Biological Growth (Tier 3)
+- **Biological Crop Growth Stage Tracker:** Visual progression bars on all active bed cards tracking biological stages (`🌱 Sprout` $\to$ `🌿 Vegetative` $\to$ `🌸 Flowering/Fruiting` $\to$ `🧺 Harvest Ready`) with countdown days to harvest based on regional tropical maturity benchmarks.
+- **"Today's Farm Pulse" Live Momentum:** Real-time operational scorecard at the top of Home showing hydrated beds ratio (`18/22 Beds Watered`), daily harvest weight (`38.5 kg`), and tasks cleared (`5/5 Done`) with a whole-farm completion progress bar.
+- **1-Tap Quick-Water on Grid Tiles:** Direct `💧` hydration button on bed tiles with water ripple wave animation for sub-second logging without opening modals.
+- **Optimal Foliar Spray Advisory:** Agronomic weather analysis evaluating temperature and rain risk to recommend the safest spray window.
+- **Tactile Action "Juice":** GPU-accelerated micro-animations on logging (Water Ripple, Sprout Pop, Yield Bounce, Shield Shimmer).
+
+### 7. Weather Forecast & Coordinates
 - **Exact Coordinates:** Configured for farm coordinates `6°49'42.5"N, 116°45'56.8"E` (`6.828472, 116.765778`) in Kudat, Sabah (Timezone: `Asia/Kuching` / GMT+8).
 - **Open-Meteo Integration:** 4-day forecast for temperature, precipitation probability, and weather codes without requiring an API key.
 
@@ -52,15 +59,15 @@ An offline-first Progressive Web App (PWA) built specifically for managing and l
 
 ```
 KabunFarm/
-├── index.html          # Main HTML structure with bottom sheet modals
-├── style.css           # Vanilla CSS (design system, tokens, bottom sheets)
+├── index.html          # Main HTML structure with bottom sheet modals & momentum pulse
+├── style.css           # Vanilla CSS (design system, tokens, GPU animations)
 ├── sw.js               # Cache-first Service Worker for offline PWA
 ├── test.html           # Zero-dependency browser regression test suite
 └── js/
     ├── state.js        # State store, date utilities, constants, color maps
-    ├── calculations.js # Pure agricultural math (watering engine, dilution, P&L)
+    ├── calculations.js # Pure agricultural math (watering engine, growth stages, dilution, P&L)
     ├── db.js           # Firestore SDK persistence, offline queues, CRUD operations
-    ├── views.js        # DOM template renderers (cards, grid, chips, filters)
+    ├── views.js        # DOM template renderers (cards, grid, chips, momentum)
     └── app.js          # Main app controller, modal flows, window bridge
 ```
 
@@ -75,13 +82,16 @@ KabunFarm/
 
 Open `test.html` directly in any web browser — no local server or npm install required.
 
-The regression suite contains **78 pure-function assertions** covering:
+The regression suite contains **90 pure-function assertions** covering:
 - Date recovery from UTC ISO timestamps across month boundaries
 - 3-Way watering logic (whole-farm vs plot vs bed priority and multi-day gaps)
 - Fallow bed watering exclusion
 - Multi-ingredient recipe parsing and extreme sprayer tank scaling (up to 1000L IBC)
 - Crop P&L cost sharing, decimal rounding, and negative margin calculations
 - Sequential bed gap-finding (`findNextAvailableBedNumber`), custom bed IDs, and bed restoration
+- Biological crop growth stage classification (`calculateCropProgress`)
+- Daily farm momentum rollups (`calculateDailyMomentum`)
+- Weather-driven spray window advisory (`evaluateSprayWindow`)
 
 ---
 
@@ -93,10 +103,8 @@ The regression suite contains **78 pure-function assertions** covering:
 ### ✅ Tier 2: Mobile Ergonomics & Field Speed (Done)
 - Numeric keypad optimization (`inputmode="decimal"`), sprayer tank steppers, bottom sheet modals, 2-column bed grid view, zero-accordion formula chips, 1-tap task execution, multi-bed batch logging.
 
-### 🔮 Tier 3: Operational Intelligence & Advanced Polish (Upcoming)
-1. **Optimal Spray Window Advisory:** Weather-driven foliar spray window evaluator using Open-Meteo hourly temp, wind, and rain risk.
-2. **Crop Growth Stage Progress Bars:** Visual benchmarks on bed cards (e.g. *"Day 22 / Est. 65d · 34% (Vegetative)"*).
-3. **Visual Offline Sync Queue Counter:** Header badge showing exact count of unsynced writes in offline queue (`⏳ 3 Pending Sync`).
+### ✅ Tier 3: Operational Intelligence & Interactive Gamification (Done)
+- Biological crop growth progression bars, "Today's Farm Pulse" momentum scorecard, 1-tap grid quick-water, optimal foliar spray advisory, tactile action juice animations, and 90 automated unit tests.
 
 ---
 

@@ -40,7 +40,10 @@ import {
     groupByPlot,
     parseRecipe,
     renderIngredients,
-    computeCropPL
+    computeCropPL,
+    calculateCropProgress,
+    calculateDailyMomentum,
+    evaluateSprayWindow
 } from "./calculations.js";
 
 // --- 1. Form Datalists & Scope Dropdowns ---
@@ -77,6 +80,52 @@ export function populateBedDropdown() {
 }
 
 // --- 2. Bed List & Grid Renderers ---
+export function renderFarmMomentum() {
+    const container = document.getElementById("farmMomentumCard");
+    if (!container) return;
+
+    const m = calculateDailyMomentum();
+    if (!m.totalBeds) {
+        if (container.parentElement) container.parentElement.style.display = "none";
+        container.style.display = "none";
+        return;
+    }
+    if (container.parentElement) container.parentElement.style.display = "block";
+    container.style.display = "block";
+
+    const completeBadge = m.isAllClear ? `
+        <span class="momentum-complete-badge">🎉 Whole Farm Cleared!</span>` : "";
+
+    container.innerHTML = `
+        <div class="momentum-header">
+            <span class="momentum-title">⚡ Today's Farm Pulse</span>
+            ${completeBadge}
+        </div>
+        <div class="momentum-stats-row">
+            <div class="momentum-stat-box">
+                <span class="momentum-stat-val">${m.wateredBeds}/${m.totalBeds}</span>
+                <span class="momentum-stat-label">💧 Hydrated</span>
+            </div>
+            <div class="momentum-stat-box">
+                <span class="momentum-stat-val">${m.harvestKg.toFixed(1).replace(/\.0$/, '')} kg</span>
+                <span class="momentum-stat-label">🧺 Harvested</span>
+            </div>
+            <div class="momentum-stat-box">
+                <span class="momentum-stat-val">${m.tasksDone}/${m.totalTasks}</span>
+                <span class="momentum-stat-label">⚡ Tasks</span>
+            </div>
+        </div>
+        <div class="momentum-bar-wrap">
+            <div class="momentum-bar-track">
+                <div class="momentum-bar-fill" style="width:${m.hydrationPct}%;"></div>
+            </div>
+            <div class="momentum-bar-desc">
+                <span>Farm Hydration</span>
+                <span>${m.hydrationPct}%</span>
+            </div>
+        </div>`;
+}
+
 export function renderGrowingBedCard(bed) {
     const lastLine = lastActivityLabel(bed.lastActivity);
     const safeBedNum = escapeHtml(String(bed.bedNumber));
@@ -87,11 +136,26 @@ export function renderGrowingBedCard(bed) {
             <span class="bed-chevron">›</span>
         </div>
         <div class="bed-crops">
-            ${bed.crops.map(c => `
-            <div class="bed-crop-row">
-                <span>🌱 ${escapeHtml(c.cropName)}</span>
-                <span class="bed-day-badge">Day ${daysSince(c.plantingDate)}</span>
-            </div>`).join("")}
+            ${bed.crops.map(c => {
+                const prog = calculateCropProgress(c.cropName, c.plantingDate);
+                const readyClass = prog.isReady ? " is-ready" : "";
+                return `
+                <div class="bed-crop-item">
+                    <div class="bed-crop-row">
+                        <span style="font-weight:700;">🌱 ${escapeHtml(c.cropName)}</span>
+                        <span class="bed-day-badge">Day ${prog.daysElapsed}</span>
+                    </div>
+                    <div class="crop-growth-box">
+                        <div class="crop-growth-header">
+                            <span class="stage-pill${readyClass}">${prog.stageIcon} ${prog.stageLabel}</span>
+                            <span class="growth-pct-text">${prog.pct}% (${prog.daysLeft}d left)</span>
+                        </div>
+                        <div class="crop-growth-track">
+                            <div class="crop-growth-fill${readyClass}" style="width:${prog.pct}%;"></div>
+                        </div>
+                    </div>
+                </div>`;
+            }).join("")}
         </div>
         ${lastLine ? `<p class="bed-last-activity">${escapeHtml(lastLine)}</p>` : ""}
         ${wateringAlert(bed)}
@@ -167,9 +231,17 @@ export function renderBedTile(bed) {
     if (isFallow) dotClass += " fallow";
     else if (warnWater) dotClass += " warn";
 
+    const quickWaterBtn = !isFallow ? `
+        <button type="button" class="tile-quick-water" onclick="quickWaterBed('${safeBedNum}', event)" aria-label="Quick Water Bed ${safeBedNum}" title="1-Tap Water">
+            💧
+        </button>` : "";
+
     return `
-    <div class="${tileClass}" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
-        <span class="bed-tile-num">${safeBedNum}</span>
+    <div class="${tileClass}" id="bedTile_${safeBedNum}" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
+        <div class="bed-tile-header">
+            <span class="bed-tile-num">${safeBedNum}</span>
+            ${quickWaterBtn}
+        </div>
         <span class="bed-tile-crop">${escapeHtml(cropName)}</span>
         <div class="bed-tile-status">
             <span class="${dotClass}"></span>
@@ -227,6 +299,7 @@ export function renderBedGrid(beds) {
 }
 
 export function renderBeds(beds) {
+    renderFarmMomentum();
     const listContainer = document.getElementById("batchList");
     const gridContainer = document.getElementById("bedGridList");
 
@@ -360,6 +433,12 @@ export function renderWeather(data) {
             <span>Rain likely today — Bed ${escapeHtml(String(hintBed.bedNumber))} may not need watering.</span>
         </div>` : "";
 
+    const sprayAdvice = evaluateSprayWindow(data);
+    const sprayBadge = sprayAdvice ? `
+        <div class="spray-advisory-badge${sprayAdvice.score === 'bad' ? ' warning' : ''}">
+            ${escapeHtml(sprayAdvice.text)}
+        </div>` : "";
+
     container.innerHTML = `
         <div class="weather-main-row">
             <span class="weather-icon-big">${icon}</span>
@@ -377,6 +456,7 @@ export function renderWeather(data) {
             <span>${recText}</span>
         </div>
         <div class="weather-forecast-strip">${dayStrip}</div>
+        ${sprayBadge}
         ${hint}
         ${staleNote}`;
 }
@@ -609,6 +689,7 @@ export function renderTodayTaskRow(task) {
 }
 
 export function renderTodayTasks() {
+    renderFarmMomentum();
     const container  = document.getElementById("todayTasksList");
     const dateLabel  = document.getElementById("todayTasksDate");
     if (!container) return;

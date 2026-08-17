@@ -123,10 +123,10 @@
   import * as App from "./js/app.js";
 
   // Re-expose to local test scope
-  const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber } = State;
-  const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal } = Calc;
-  const { planDayLabel, renderTaskCard } = Views;
-  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, toggleBedFallow, restoreBed, deleteBed, deleteTask, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
+  const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber, LOGS_CACHE_KEY } = State;
+  const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal, calculateCropProgress, calculateDailyMomentum, evaluateSprayWindow } = Calc;
+  const { planDayLabel, renderTaskCard, renderFarmMomentum } = Views;
+  const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
   // We no longer shadow the global state with 'let' variables.
@@ -929,6 +929,96 @@
     } finally {
       window.confirm = origConfirm;
     }
+  });
+
+  // ---------------------------------------------------------------------
+  group("Tier 3: Operational Intelligence & Growth Progression");
+
+  test("calculateCropProgress calculates stage and percentage for Kangkong", () => {
+    // 25 day cycle. Planted 10 days ago -> 40% (Vegetative)
+    const prog = calculateCropProgress("Kangkong", daysAgoStr(10));
+    assertEqual(prog.totalDays, 25);
+    assertEqual(prog.daysElapsed, 10);
+    assertEqual(prog.pct, 40);
+    assertEqual(prog.daysLeft, 15);
+    assertEqual(prog.stageLabel, "Vegetative");
+    assertEqual(prog.isReady, false);
+  });
+
+  test("calculateCropProgress marks mature crop as Harvest Ready", () => {
+    // Sawi (30 days). Planted 32 days ago -> 100% (Harvest Ready)
+    const prog = calculateCropProgress("Sawi Hijau", daysAgoStr(32));
+    assertEqual(prog.totalDays, 30);
+    assertEqual(prog.pct, 100);
+    assertEqual(prog.stageLabel, "Harvest Ready");
+    assertEqual(prog.isReady, true);
+  });
+
+  test("calculateCropProgress defaults to 40 days for unknown specialty crop", () => {
+    const prog = calculateCropProgress("Exotic Herb", daysAgoStr(20));
+    assertEqual(prog.totalDays, 40);
+    assertEqual(prog.pct, 50);
+    assertEqual(prog.stageLabel, "Vegetative");
+  });
+
+  test("calculateDailyMomentum aggregates hydration %, harvest kg, and tasks", () => {
+    const today = todayString();
+    State.state.bedsData = [
+      { bedNumber: 1, lastWatered: today, status: "active", crops: [] },
+      { bedNumber: 2, lastWatered: daysAgoStr(2), status: "active", crops: [] },
+      { bedNumber: 3, lastWatered: today, status: "active", crops: [] },
+      { bedNumber: 4, status: "fallow", crops: [] } // Fallow excluded
+    ];
+    localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify([
+      { date: today, activityCategory: "harvest", weight: "12.5", status: "active" },
+      { date: today, activityCategory: "harvest", weight: "5.0", status: "active" },
+      { date: daysAgoStr(1), activityCategory: "harvest", weight: "20.0", status: "active" } // Yesterday excluded
+    ]));
+    State.state.tasksData = [
+      { date: today, status: "done" },
+      { date: today, status: "active" }
+    ];
+
+    const m = calculateDailyMomentum();
+    assertEqual(m.totalBeds, 3);
+    assertEqual(m.wateredBeds, 2);
+    assertEqual(m.hydrationPct, 67); // 2/3 = 66.67% -> 67%
+    assertEqual(m.harvestKg, 17.5);
+    assertEqual(m.tasksDone, 1);
+    assertEqual(m.totalTasks, 2);
+    assertEqual(m.isAllClear, false);
+  });
+
+  test("evaluateSprayWindow identifies high rain risk as bad foliar window", () => {
+    const mockWeatherRain = {
+      daily: { precipitation_probability_max: [75, 20, 10], temperature_2m_max: [30, 29, 28] }
+    };
+    const res = evaluateSprayWindow(mockWeatherRain);
+    assertEqual(res.isGood, false);
+    assertEqual(res.score, "bad");
+  });
+
+  test("evaluateSprayWindow identifies clear weather as optimal foliar window", () => {
+    const mockWeatherClear = {
+      daily: { precipitation_probability_max: [10, 15, 10], temperature_2m_max: [28, 29, 28] }
+    };
+    const res = evaluateSprayWindow(mockWeatherClear);
+    assertEqual(res.isGood, true);
+    assertEqual(res.score, "good");
+  });
+
+  test("quickWaterBed updates bed lastWatered and creates log entry", () => {
+    const today = todayString();
+    State.state.bedsData = [{ bedNumber: 9, status: "active", crops: [{ cropName: "Kailan", plantingDate: today }] }];
+    localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify([]));
+
+    quickWaterBed(9);
+    const bed = getBed(9);
+    assertEqual(bed.lastWatered, today);
+    const logs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+    assertEqual(logs.length, 1);
+    assertEqual(logs[0].activityCategory, "watering");
+    assertEqual(logs[0].bedNumber, "9");
   });
 
   // ---------------------------------------------------------------------

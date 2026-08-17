@@ -8,6 +8,7 @@ import {
     LOGS_CACHE_KEY,
     SALES_CACHE_KEY,
     ymd,
+    todayString,
     daysSince,
     escapeHtml,
     getPlot,
@@ -248,4 +249,133 @@ export function exportActivityCsv() {
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
+}
+
+// --- 5. Tier 3: Biological Crop Growth & Daily Momentum ---
+export const STANDARD_CROP_DAYS = {
+    "kangkong": 25,
+    "bayam": 25,
+    "sawi": 30,
+    "pak choi": 30,
+    "bok choy": 30,
+    "lettuce": 35,
+    "cucumber": 45,
+    "timun": 45,
+    "long beans": 50,
+    "kacang panjang": 50,
+    "okra": 55,
+    "bendi": 55,
+    "eggplant": 70,
+    "terung": 70,
+    "corn": 75,
+    "jagung": 75,
+    "chilli": 85,
+    "chili": 85,
+    "cili": 85,
+    "tomato": 75
+};
+
+export function calculateCropProgress(cropName, plantingDate) {
+    if (!plantingDate) {
+        return { pct: 0, daysElapsed: 0, totalDays: 40, daysLeft: 40, stageLabel: "Unknown", stageIcon: "🌱", isReady: false };
+    }
+    const daysElapsed = Math.max(0, daysSince(plantingDate));
+    const norm = (cropName || "").toLowerCase().trim();
+    let totalDays = 40;
+    for (const [key, days] of Object.entries(STANDARD_CROP_DAYS)) {
+        if (norm.includes(key)) {
+            totalDays = days;
+            break;
+        }
+    }
+
+    const pct = Math.min(100, Math.round((daysElapsed / totalDays) * 100));
+    const daysLeft = Math.max(0, totalDays - daysElapsed);
+    const isReady = daysElapsed >= totalDays;
+
+    let stageLabel = "Sprout";
+    let stageIcon = "🌱";
+    if (pct >= 90) {
+        stageLabel = "Harvest Ready";
+        stageIcon = "🧺";
+    } else if (pct >= 60) {
+        stageLabel = "Flowering / Fruiting";
+        stageIcon = "🌸";
+    } else if (pct >= 15) {
+        stageLabel = "Vegetative";
+        stageIcon = "🌿";
+    }
+
+    return {
+        pct,
+        daysElapsed,
+        totalDays,
+        daysLeft,
+        stageLabel,
+        stageIcon,
+        isReady
+    };
+}
+
+export function calculateDailyMomentum() {
+    const today = todayString();
+    const activeBeds = (state.bedsData || []).filter(b => b.status !== "fallow" && b.status !== "retired");
+    const totalActiveBeds = activeBeds.length;
+
+    // Count beds watered today
+    let wateredTodayCount = 0;
+    const farmWideWatered = latestWholeFarmWatering() === today;
+
+    activeBeds.forEach(bed => {
+        if (farmWideWatered) {
+            wateredTodayCount++;
+        } else {
+            const bedWatered = bed.lastWatered && ymd(bed.lastWatered) === today;
+            const plotWatered = bed.plotId && latestPlotWatering(bed.plotId) === today;
+            if (bedWatered || plotWatered) wateredTodayCount++;
+        }
+    });
+
+    // Calculate total kg harvested today
+    const logs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+    let harvestKgToday = 0;
+    logs.forEach(l => {
+        if (l.date === today && l.activityCategory === "harvest" && l.status !== "deleted") {
+            const w = parseFloat(l.weight);
+            if (!isNaN(w) && w > 0) harvestKgToday += w;
+        }
+    });
+
+    // Calculate tasks completed today vs total today
+    const tasks = (state.tasksData || []).filter(t => t.date === today && t.status !== "deleted");
+    const totalTasksToday = tasks.length;
+    const tasksDoneToday = tasks.filter(t => t.status === "done").length;
+
+    const hydrationPct = totalActiveBeds > 0 ? Math.round((wateredTodayCount / totalActiveBeds) * 100) : 100;
+    const isAllClear = hydrationPct === 100 && (totalTasksToday === 0 || tasksDoneToday === totalTasksToday);
+
+    return {
+        wateredBeds: wateredTodayCount,
+        totalBeds: totalActiveBeds,
+        hydrationPct,
+        harvestKg: harvestKgToday,
+        tasksDone: tasksDoneToday,
+        totalTasks: totalTasksToday,
+        isAllClear
+    };
+}
+
+export function evaluateSprayWindow(weatherData) {
+    if (!weatherData || !weatherData.daily) {
+        return { isGood: true, text: "Foliar window: Early morning (6:30–8:30 AM) recommended", score: "good" };
+    }
+    const todayRainProb = weatherData.daily.precipitation_probability_max ? weatherData.daily.precipitation_probability_max[0] : 0;
+
+    if (todayRainProb >= 60) {
+        return { isGood: false, text: "🌧️ High rain risk (" + todayRainProb + "%) — avoid foliar spray (wash-off risk)", score: "bad" };
+    }
+    if (todayRainProb >= 35) {
+        return { isGood: true, text: "⚠️ Moderate rain risk (" + todayRainProb + "%) — spray early morning only with sticker", score: "fair" };
+    }
+    return { isGood: true, text: "✨ Optimal spray window: 6:30–8:30 AM (Temp < 28°C, low rain risk)", score: "good" };
 }

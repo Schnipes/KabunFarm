@@ -997,6 +997,55 @@ export async function executeTaskNow(taskId, event) {
     showToast(`⚡ 1-Tap Logged: ${CATEGORY_LABEL[activity] || activity} · ${scopeLabel}`);
 }
 
+export async function quickWaterBed(bedNumber, event) {
+    if (event) event.stopPropagation();
+    const bed = getBed(bedNumber);
+    if (!bed) return;
+
+    const tileEl = document.getElementById(`bedTile_${bedNumber}`);
+    if (tileEl) {
+        tileEl.classList.add("anim-water-ripple");
+        setTimeout(() => tileEl.classList.remove("anim-water-ripple"), 400);
+    }
+
+    const today = todayString();
+    const logId = "log_" + Date.now();
+    const cropNames = (bed.crops || []).map(c => c.cropName).join(", ");
+    const newLog = {
+        id: logId,
+        date: today,
+        activityCategory: "watering",
+        bedNumber: String(bedNumber),
+        cropName: cropNames,
+        inputsUsed: "1-Tap quick irrigation",
+        costRM: "",
+        revenueRM: "",
+        weight: "",
+        status: "active"
+    };
+
+    bed.lastWatered = today;
+    bed.lastActivity = { type: "watering", date: today };
+
+    const logs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+    logs.unshift(newLog);
+    localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
+    saveBeds();
+
+    renderBeds(state.bedsData);
+    renderTodayTasks();
+    showToast(`💧 Bed ${bedNumber} watered`);
+
+    const firestore = getDb();
+    if (firestore) {
+        firestore.collection("logs").doc(logId).set(newLog).catch(e => console.error(e));
+        firestore.collection("beds").doc(String(bed.bedNumber)).update({
+            lastWatered: today,
+            lastActivity: { type: "watering", date: today }
+        }).catch(e => console.error(e));
+    }
+}
+
 // --- 7. Formula Modal ---
 export function openFormulaModal(index = null) {
     state.editingFormulaIndex = index;
@@ -1459,6 +1508,7 @@ if (typeof window !== "undefined") {
         // Beds & Plots
         addBed,
         bulkAddBeds,
+        quickWaterBed,
         toggleBedFallow,
         restoreBed,
         deleteBed,
