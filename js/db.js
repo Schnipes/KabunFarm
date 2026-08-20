@@ -189,6 +189,20 @@ export async function fetchBeds() {
         const activeBatches = activeBatchSnap.docs.map(d => ({ ...d.data() }));
         const doneBatches   = doneBatchSnap.docs.map(d => ({ ...d.data() }));
 
+        if (allBeds.length === 0 && cached) {
+            try {
+                const cachedArr = JSON.parse(cached);
+                if (Array.isArray(cachedArr) && cachedArr.length > 0) {
+                    state.bedsData = cachedArr;
+                    renderBeds(state.bedsData);
+                    populateBedDropdown();
+                    renderBedFilterChips();
+                    refreshCropDatalists();
+                    return;
+                }
+            } catch (e) {}
+        }
+
         state.bedsData = activeBeds.map(bed => ({
             ...bed,
             crops: activeBatches
@@ -285,10 +299,20 @@ export async function fetchPlots() {
         const firestore = getDb();
         if (!firestore) return;
         const snap = await firestore.collection("plots").get();
-        state.plotsData = snap.docs
+        const docs = snap.docs
             .map(d => ({ ...d.data() }))
             .filter(p => p.status !== "deleted");
-        localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(state.plotsData));
+        if (docs.length === 0 && cached) {
+            try {
+                const cachedPlots = JSON.parse(cached);
+                if (Array.isArray(cachedPlots) && cachedPlots.length > 0) {
+                    state.plotsData = cachedPlots;
+                }
+            } catch (e) {}
+        } else {
+            state.plotsData = docs;
+            localStorage.setItem(PLOTS_CACHE_KEY, JSON.stringify(state.plotsData));
+        }
     } catch (e) {
         console.error("Could not load plots:", e);
     } finally {
