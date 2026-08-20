@@ -1584,7 +1584,7 @@ if (typeof window !== "undefined") {
         openAddBedModal,
         closeAddBedModal,
         switchAddBedTab,
-        openAddBedModal,
+        handleAddBedSubmit,
         openArchivedBedsModal,
         closeArchivedBedsModal,
         seedDefaultFarmBeds,
