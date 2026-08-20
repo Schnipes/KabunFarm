@@ -354,7 +354,7 @@ export function renderBedGrid(beds) {
     });
 
     if (solo.length) {
-        const soloSorted = solo.slice().sort(numSort);
+        const soloSorted = sortBeds(solo);
         html += `
         <div class="bed-grid-plot-group">
             <div class="bed-grid-plot-header">

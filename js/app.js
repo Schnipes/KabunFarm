@@ -77,6 +77,7 @@ import {
     fetchWeather,
     addBed,
     bulkAddBeds,
+    seedDefaultFarmBeds,
     toggleBedFallow,
     restoreBed,
     deleteBed,
