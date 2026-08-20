@@ -224,14 +224,26 @@
         </div>
 
         <div class="form-field">
-          <label for="activityCategory">Activity category</label>
-          <select id="activityCategory" required>
-            <option value="" disabled selected>Select category</option>
-            <option value="sowing">Sowing</option>
-            <option value="watering">Watering</option>
-            <option value="pest_control">Pest control</option>
-            <option value="harvest">Harvest</option>
-          </select>
+          <label>Activity category</label>
+          <input type="hidden" id="activityCategory" value="" required>
+          <div class="activity-pill-grid" id="activityPillGrid">
+            <button type="button" class="activity-pill-btn" data-category="watering" onclick="selectActivityCategory('watering')">
+              <span class="pill-icon">💧</span>
+              <span class="pill-label">Watering</span>
+            </button>
+            <button type="button" class="activity-pill-btn" data-category="harvest" onclick="selectActivityCategory('harvest')">
+              <span class="pill-icon">🧺</span>
+              <span class="pill-label">Harvest</span>
+            </button>
+            <button type="button" class="activity-pill-btn" data-category="pest_control" onclick="selectActivityCategory('pest_control')">
+              <span class="pill-icon">🐛</span>
+              <span class="pill-label">Pest Control</span>
+            </button>
+            <button type="button" class="activity-pill-btn" data-category="sowing" onclick="selectActivityCategory('sowing')">
+              <span class="pill-icon">🌱</span>
+              <span class="pill-label">Sowing</span>
+            </button>
+          </div>
         </div>
 
         <div class="form-field">
@@ -662,6 +674,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="js/app.js?v=20260821c"></script>
+  <script type="module" src="js/app.js?v=20260821d"></script>
 </body>
 </html>

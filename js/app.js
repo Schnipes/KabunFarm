@@ -212,12 +212,32 @@ export function syncDatePresets(inputId) {
     });
 }
 
+export function syncActivityCategoryPills(activeCat) {
+    const grid = document.getElementById("activityPillGrid");
+    if (!grid) return;
+    const cat = activeCat !== undefined ? activeCat : (document.getElementById("activityCategory")?.value || "");
+    const btns = grid.querySelectorAll(".activity-pill-btn");
+    btns.forEach(btn => {
+        btn.classList.toggle("active", btn.dataset.category === cat);
+    });
+}
+
+export function selectActivityCategory(cat) {
+    const input = document.getElementById("activityCategory");
+    if (input) input.value = cat || "";
+    syncActivityCategoryPills(cat);
+    document.getElementById("activityCategory")?.classList.remove("invalid");
+    updateBedFields();
+}
+
 // --- 3. Activity Log Modal ---
 export function openModal(type, targetBed) {
     document.getElementById("modalTitle").textContent = MODAL_TITLES[type] || "Log activity";
     document.getElementById("logDate").value = todayString();
     syncDatePresets("logDate");
-    document.getElementById("activityCategory").value = DEFAULT_CATEGORY[type] || "";
+    const cat = DEFAULT_CATEGORY[type] || "";
+    document.getElementById("activityCategory").value = cat;
+    syncActivityCategoryPills(cat);
 
     populateBedDropdown();
 
@@ -253,6 +273,7 @@ export function closeModal() {
     document.getElementById("modalOverlay")?.classList.remove("open");
     document.body.style.overflow = "";
     document.getElementById("logForm")?.reset();
+    syncActivityCategoryPills("");
     state.selectedQuickFormulaId = null;
     document.getElementById("currentCropsField").hidden  = true;
     document.getElementById("harvestCropsField").hidden  = true;
@@ -315,9 +336,9 @@ export function updateBedFields() {
     const isMulti    = scope === "multi";
     const isSpecific = scope !== "all" && !isPlot && !isMulti;
 
-    if (isSowing && (scope === "all" || isPlot || isMulti) && state.bedsData.length) {
+    if (isSowing && scope === "all" && state.bedsData.length) {
         document.getElementById("bedScope").value = state.bedsData[0].bedNumber;
-        showToast("Sowing requires a specific bed — switched to Bed " + state.bedsData[0].bedNumber);
+        showToast("Sowing requires a specific bed or plot — switched to Bed " + state.bedsData[0].bedNumber);
         updateBedFields();
         return;
     }
@@ -1574,6 +1595,8 @@ if (typeof window !== "undefined") {
         toggleInputs,
         toggleFinancials,
         updateBedFields,
+        selectActivityCategory,
+        syncActivityCategoryPills,
 
         // Beds & Plots
         addBed,

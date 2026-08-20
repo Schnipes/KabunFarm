@@ -2641,3 +2641,63 @@ textarea.invalid {
   flex-direction: column;
   gap: 8px;
 }
+
+/* Activity Category Pill Buttons */
+.activity-pill-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 6px;
+}
+.activity-pill-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 12px 10px;
+  background: var(--color-surface);
+  border: 2px solid var(--color-border);
+  border-radius: var(--radius);
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text);
+  min-height: 48px;
+  transition: all 0.15s ease;
+  user-select: none;
+}
+.activity-pill-btn:hover {
+  border-color: #999;
+}
+.activity-pill-btn:active {
+  transform: scale(0.98);
+}
+.activity-pill-btn.active {
+  font-weight: 700;
+}
+.activity-pill-btn.active[data-category="watering"] {
+  background: #e0f2fe;
+  border-color: #0284c7;
+  color: #0369a1;
+}
+.activity-pill-btn.active[data-category="harvest"] {
+  background: #fef3c7;
+  border-color: #d97706;
+  color: #92400e;
+}
+.activity-pill-btn.active[data-category="pest_control"] {
+  background: #fee2e2;
+  border-color: #dc2626;
+  color: #991b1b;
+}
+.activity-pill-btn.active[data-category="sowing"] {
+  background: #dcfce7;
+  border-color: #16a34a;
+  color: #166534;
+}
+.activity-pill-btn .pill-icon {
+  font-size: 18px;
+  line-height: 1;
+}
+.activity-pill-btn .pill-label {
+  font-size: 13.5px;
+}
