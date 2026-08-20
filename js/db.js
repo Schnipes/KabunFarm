@@ -501,6 +501,10 @@ export function bulkAddBeds(startNum, count, plotId = "") {
     showToast(`Added ${addedNums.length} beds (Beds ${addedNums[0]}–${addedNums[addedNums.length - 1]})`);
 }
 
+export function seedDefaultFarmBeds() {
+    bulkAddBeds(1, 10);
+}
+
 export function toggleBedFallow(bedNum) {
     const targetNum = bedNum || state.selectedBedForLog;
     const bed = getBed(targetNum);

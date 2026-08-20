@@ -385,10 +385,14 @@ export function renderBeds(beds) {
     if (!beds.length) {
         if (listContainer) {
             listContainer.innerHTML = `
-            <div class="empty-beds-card" onclick="openAddBedModal()">
+            <div class="empty-beds-card">
                 <span class="empty-beds-icon">🌱</span>
-                <p class="empty-beds-title">Add your first bed</p>
-                <p class="empty-beds-hint">Tap to create Bed 1</p>
+                <p class="empty-beds-title">No beds found</p>
+                <p class="empty-beds-hint">Tap below to create custom beds or bulk seed Beds 1–10</p>
+                <div style="display:flex;gap:10px;margin-top:14px;justify-content:center;flex-wrap:wrap;">
+                    <button type="button" class="add-bed-btn" onclick="openAddBedModal()">+ Add Bed</button>
+                    <button type="button" class="add-bed-btn" onclick="seedDefaultFarmBeds()">🌱 Seed Beds 1–10</button>
+                </div>
             </div>`;
         }
         if (gridContainer) gridContainer.innerHTML = '<p style="color:#888;font-size:13px;padding:8px 4px;">No beds created yet.</p>';
