@@ -95,34 +95,7 @@
         </div>
       </section>
 
-      <!-- Quick log — secondary, for whole-farm or fast access -->
-      <section aria-label="Quick actions">
-        <p class="section-label">Quick log</p>
-        <div class="quick-actions-primary">
-          <button class="action-btn water" onclick="openModal('water')">
-            <span class="icon" aria-hidden="true">💧</span>
-            <span>Irrigate</span>
-          </button>
-          <button class="action-btn harvest" onclick="openModal('harvest')">
-            <span class="icon" aria-hidden="true">🧺</span>
-            <span>Harvest</span>
-          </button>
-        </div>
-        <div class="quick-actions-secondary">
-          <button class="action-btn action-btn-sm pest" onclick="openModal('pest')">
-            <span class="icon" aria-hidden="true">🐛</span>
-            <span>Pest Control</span>
-          </button>
-          <button class="action-btn action-btn-sm crop" onclick="openModal('crop')">
-            <span class="icon" aria-hidden="true">🌱</span>
-            <span>Sow Crop</span>
-          </button>
-          <button class="action-btn action-btn-sm sale" onclick="openSaleModal()">
-            <span class="icon" aria-hidden="true">💰</span>
-            <span>Log Sale</span>
-          </button>
-        </div>
-      </section>
+
 
     </div>
 
@@ -215,7 +188,7 @@
       <span class="nav-icon" aria-hidden="true">🗓️</span>
       <span>Plan</span>
     </button>
-    <button type="button" class="nav-btn nav-btn-fab" onclick="openModal('water')" aria-label="Quick Log">
+    <button type="button" class="nav-btn nav-btn-fab" onclick="openModal()" aria-label="Quick Log">
       <span class="fab-icon" aria-hidden="true">⚡</span>
       <span class="fab-label">Log</span>
     </button>
@@ -296,6 +269,10 @@
         <div class="form-field" id="harvestWeightField" hidden>
           <label for="harvestWeight">Harvest weight (kg) <span style="font-size:11px;color:#888;">optional</span></label>
           <input type="number" id="harvestWeight" placeholder="0.0" inputmode="decimal" min="0" step="0.1">
+          <label class="checkbox-label" style="display:flex;align-items:center;gap:8px;margin-top:8px;font-size:13px;color:var(--color-text-main);cursor:pointer;">
+            <input type="checkbox" id="harvestClearBed">
+            <span>Final Harvest (Clear crop & mark bed ready to sow)</span>
+          </label>
         </div>
 
         <div class="form-field" id="newCropField" hidden>
@@ -685,6 +662,6 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="js/app.js?v=20260817l"></script>
+  <script type="module" src="js/app.js?v=20260821a"></script>
 </body>
 </html>

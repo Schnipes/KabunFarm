@@ -313,6 +313,13 @@ export function getPlot(plotId) {
     return found;
 }
 
+export function sortBeds(beds) {
+    if (!Array.isArray(beds)) return [];
+    return beds.slice().sort((a, b) =>
+        String(a.bedNumber || "").localeCompare(String(b.bedNumber || ""), undefined, { numeric: true, sensitivity: "base" })
+    );
+}
+
 export function bedsInPlot(plotId) {
     const list = (typeof window !== "undefined" && Array.isArray(window.bedsData) && window.bedsData.length) ? window.bedsData : state.bedsData;
     let members = list.filter(b => String(b.plotId || "") === String(plotId));
@@ -322,7 +329,7 @@ export function bedsInPlot(plotId) {
             members = cached.filter(b => String(b.plotId || "") === String(plotId));
         } catch (e) {}
     }
-    return members;
+    return sortBeds(members);
 }
 
 export function saveBeds() {

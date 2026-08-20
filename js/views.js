@@ -29,6 +29,7 @@ import {
     getBed,
     getPlot,
     bedsInPlot,
+    sortBeds,
     saveBeds,
     showToast
 } from "./state.js";
@@ -255,8 +256,7 @@ export function renderPlotCard(plotId, beds) {
         ? `<span class="plot-stat-pill warn">💧 ${flagged}/${total} unwatered</span>`
         : `<span class="plot-stat-pill good">💧 All ${total} watered</span>`;
 
-    const numSort = (a, b) => (Number(a.bedNumber) || 0) - (Number(b.bedNumber) || 0);
-    const sortedBeds = beds.slice().sort(numSort);
+    const sortedBeds = sortBeds(beds);
 
     const nestedBedsHtml = isExpanded ? `
         <div class="plot-nested-beds">
@@ -334,11 +334,9 @@ export function renderBedGrid(beds) {
     const { grouped, solo } = groupByPlot(beds);
     let html = "";
 
-    const numSort = (a, b) => (Number(a.bedNumber) || 0) - (Number(b.bedNumber) || 0);
-
     Object.keys(grouped).forEach(plotId => {
         const plot = getPlot(plotId);
-        const plotBeds = (grouped[plotId] || []).slice().sort(numSort);
+        const plotBeds = sortBeds(grouped[plotId] || []);
         const { total, flagged } = plotWateringRollup(plotId);
         const waterBadge = flagged > 0 ? `<span style="color:#d97706;font-weight:700;">💧 ${flagged}/${total} unwatered</span>` : `<span>💧 All watered</span>`;
         const safePlotId = escapeHtml(String(plotId));

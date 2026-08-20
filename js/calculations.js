@@ -43,7 +43,7 @@ export function latestPlotWatering(plotId) {
 }
 
 export function getWateringStatus(bed) {
-    if (!bed || bed.status === "fallow" || bed.status === "retired" || !bed.crops || !bed.crops.length) {
+    if (!bed || bed.status === "fallow" || bed.status === "retired") {
         return { needsWater: false, days: null };
     }
 
@@ -68,8 +68,9 @@ export function wateringAlert(bed) {
 
 export function plotWateringRollup(plotId) {
     const beds = bedsInPlot(plotId);
-    const flagged = beds.filter(b => getWateringStatus(b).needsWater);
-    return { total: beds.length, flagged: flagged.length };
+    const activeBeds = beds.filter(b => b.status !== "fallow" && b.status !== "retired");
+    const flagged = activeBeds.filter(b => getWateringStatus(b).needsWater);
+    return { total: activeBeds.length, flagged: flagged.length };
 }
 
 export function groupByPlot(bedList) {

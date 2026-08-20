@@ -263,6 +263,8 @@ export function closeModal() {
     document.getElementById("financialsField").hidden    = true;
     document.getElementById("toggleInputsBtn").textContent     = "＋ Extra notes";
     document.getElementById("toggleFinancialsBtn").textContent = "＋ Add cost";
+    const harvestClearCb = document.getElementById("harvestClearBed");
+    if (harvestClearCb) harvestClearCb.checked = false;
     document.getElementById("logDate")?.classList.remove("invalid");
     document.getElementById("activityCategory")?.classList.remove("invalid");
     document.getElementById("newCropName")?.classList.remove("invalid");
@@ -504,28 +506,33 @@ export function handleSubmit(event) {
         }
     });
 
-    if (activity === "sowing" && bedScope !== "all" && !isMulti && cropName) {
-        const batchId = "batch_" + Date.now();
-        const batch = {
-            id:          batchId,
-            bedNumber:   bedScope,
-            cropName,
-            location:    "commercial",
-            plantingDate: date,
-            status:      "active"
-        };
-        if (firestore) firestore.collection("batches").doc(batchId).set(batch).catch(e => console.error("addBatch failed:", e));
-        const bed = getBed(bedScope);
-        if (bed) {
+    if (activity === "sowing" && cropName) {
+        const sowBeds = bedScope.startsWith("plot_")
+            ? bedsInPlot(bedScope)
+            : isMulti ? selectedBedNums.map(bn => getBed(bn)).filter(Boolean)
+            : (getBed(bedScope) ? [getBed(bedScope)] : []);
+
+        sowBeds.forEach((bed, idx) => {
+            const batchId = "batch_" + Date.now() + "_" + idx;
+            const batch = {
+                id:          batchId,
+                bedNumber:   bed.bedNumber,
+                cropName,
+                location:    "commercial",
+                plantingDate: date,
+                status:      "active"
+            };
+            if (firestore) firestore.collection("batches").doc(batchId).set(batch).catch(e => console.error("addBatch failed:", e));
             bed.crops = bed.crops || [];
             bed.crops.push({ id: batchId, cropName, plantingDate: date });
-        }
+        });
         populateBedDropdown();
     }
 
     if (activity === "harvest") {
         const checkedCbs = [...document.querySelectorAll('input[name="harvestCrop"]:checked')];
         const checkedIds = checkedCbs.map(cb => cb.value).filter(Boolean);
+        const isFinalHarvest = !!document.getElementById("harvestClearBed")?.checked;
 
         const harvestBeds = bedScope.startsWith("plot_")
             ? bedsInPlot(bedScope)
@@ -533,18 +540,20 @@ export function handleSubmit(event) {
             : (getBed(bedScope) ? [getBed(bedScope)] : []);
 
         harvestBeds.forEach(b => {
-            const retiring = (b.crops || []).filter(c =>
+            const targetCrops = (b.crops || []).filter(c =>
                 c.id ? checkedIds.includes(c.id) : checkedCbs.some(cb => cb.dataset.bed === String(b.bedNumber) && cb.dataset.crop === c.cropName)
             );
             b.cropHistory = b.cropHistory || [];
-            retiring.forEach(c => {
+            targetCrops.forEach(c => {
                 b.cropHistory.unshift({ cropName: c.cropName, plantingDate: c.plantingDate, harvestDate: date });
-                if (c.id && firestore) {
+                if (isFinalHarvest && c.id && firestore) {
                     firestore.collection("batches").doc(c.id).update({ status: "done", harvestDate: date })
                         .catch(e => console.error("retireBatch failed:", e));
                 }
             });
-            b.crops = (b.crops || []).filter(c => !retiring.includes(c));
+            if (isFinalHarvest) {
+                b.crops = (b.crops || []).filter(c => !targetCrops.includes(c));
+            }
         });
         populateBedDropdown();
     }
