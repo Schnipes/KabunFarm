@@ -146,12 +146,15 @@ async function processInput(inputPart, mimeType = null) {
         throw new Error("Gemini API key is not configured. Add GEMINI_API_KEY to bot/.env");
     }
 
-    const candidateModels = ["gemini-3.6-flash", "gemini-1.5-flash", "gemini-1.5-pro", "gemini-2.5-flash"];
+    const candidateModels = ["gemini-3.5-flash-lite", "gemini-3.6-flash"];
     let lastErr = null;
 
     for (const modelName of candidateModels) {
         try {
-            const model = genAI.getGenerativeModel({ model: modelName });
+            const model = genAI.getGenerativeModel({
+                model: modelName,
+                generationConfig: { responseMimeType: "application/json" }
+            });
             let contents;
             if (mimeType) {
                 contents = [

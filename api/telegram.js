@@ -290,12 +290,15 @@ async function cancelTasksInFirestore(category, date) {
 
 // Helper: Process input with Gemini models (fastest first with fallback)
 async function processWithGemini(inputPart, mimeType = null) {
-    const models = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
+    const models = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
     let lastError = null;
 
     for (const m of models) {
         try {
-            const model = genAI.getGenerativeModel({ model: m });
+            const model = genAI.getGenerativeModel({
+                model: m,
+                generationConfig: { responseMimeType: 'application/json' }
+            });
             let contents;
             if (mimeType) {
                 contents = [
@@ -325,14 +328,17 @@ async function processWithGemini(inputPart, mimeType = null) {
 
 // Helper: Process Photo Diagnosis with Gemini Vision
 async function processPhotoDiagnosis(photoBuffer, mimeType = 'image/jpeg', userCaption = '') {
-    const models = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
+    const models = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
     let lastError = null;
 
     const promptText = userCaption ? `${DIAGNOSIS_PROMPT}\nUser Caption / Context: "${userCaption}"` : DIAGNOSIS_PROMPT;
 
     for (const m of models) {
         try {
-            const model = genAI.getGenerativeModel({ model: m });
+            const model = genAI.getGenerativeModel({
+                model: m,
+                generationConfig: { responseMimeType: 'application/json' }
+            });
             const contents = [
                 promptText,
                 {
