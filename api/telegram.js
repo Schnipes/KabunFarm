@@ -5,6 +5,9 @@
 
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
+// Extend Vercel serverless execution limit for audio processing
+export const maxDuration = 30;
+
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const FIRESTORE_PROJECT_ID = 'kabunfarm';
@@ -86,11 +89,27 @@ Today's Date: ${new Date().toISOString().slice(0, 10)}.
 Return pure JSON only, without markdown fences or extra explanations.
 `;
 
-// Helper: Send message to Telegram chat
-async function sendTelegramMessage(chatId, text) {
-    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+// Helper: Send typing / action indicator
+async function sendChatAction(chatId, action = 'typing') {
+    if (!TELEGRAM_TOKEN) return;
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendChatAction`;
     try {
         await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chat_id: chatId, action })
+        });
+    } catch (e) {
+        console.error('sendChatAction error:', e);
+    }
+}
+
+// Helper: Send message to Telegram chat (returns message_id)
+async function sendTelegramMessage(chatId, text) {
+    if (!TELEGRAM_TOKEN) return null;
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    try {
+        const res = await fetch(url, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -99,8 +118,41 @@ async function sendTelegramMessage(chatId, text) {
                 parse_mode: 'Markdown'
             })
         });
+        if (res.ok) {
+            const data = await res.json();
+            return data.result?.message_id || null;
+        }
     } catch (e) {
         console.error('sendTelegramMessage error:', e);
+    }
+    return null;
+}
+
+// Helper: Edit existing Telegram message in place
+async function editTelegramMessage(chatId, messageId, text) {
+    if (!TELEGRAM_TOKEN) return;
+    if (!messageId) {
+        await sendTelegramMessage(chatId, text);
+        return;
+    }
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/editMessageText`;
+    try {
+        const res = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: chatId,
+                message_id: messageId,
+                text,
+                parse_mode: 'Markdown'
+            })
+        });
+        if (!res.ok) {
+            await sendTelegramMessage(chatId, text);
+        }
+    } catch (e) {
+        console.error('editTelegramMessage error:', e);
+        await sendTelegramMessage(chatId, text);
     }
 }
 
@@ -129,40 +181,45 @@ async function saveToFirestore(collection, id, data) {
         });
         return res.ok;
     } catch (e) {
-        console.error('saveToFirestore error:', e);
+        console.error('Firestore save error:', e);
         return false;
     }
 }
 
-// Helper: Cancel / Delete Tasks from Firestore
+// Helper: Cancel / Soft-delete planned tasks in Firestore
 async function cancelTasksInFirestore(category, date) {
-    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/tasks?pageSize=50`;
     let canceledCount = 0;
+    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/tasks`;
 
     try {
         const res = await fetch(url);
+        if (!res.ok) return 0;
         const data = await res.json();
-        if (!data.documents) return 0;
+        const docs = data.documents || [];
 
-        for (const doc of data.documents) {
+        for (const doc of docs) {
             const fields = doc.fields || {};
-            const docStatus = fields.status?.stringValue || 'pending';
             const docDate = fields.date?.stringValue;
-            const docCategory = fields.activityCategory?.stringValue;
+            const docCat = fields.activityCategory?.stringValue;
+            const docStatus = fields.status?.stringValue;
 
-            if (docStatus !== 'deleted' && (!date || docDate === date)) {
-                if (category === 'all' || !category || docCategory === category) {
-                    const docPath = doc.name; // projects/kabunfarm/databases/(default)/documents/tasks/task_123
-                    const patchUrl = `https://firestore.googleapis.com/v1/${docPath}?updateMask.fieldPaths=status`;
-                    await fetch(patchUrl, {
-                        method: 'PATCH',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({
-                            fields: {
-                                status: { stringValue: 'deleted' }
-                            }
-                        })
-                    });
+            const matchesDate = !date || docDate === date;
+            const matchesCat = category === 'all' || docCat === category;
+            const isPending = docStatus === 'pending' || !docStatus;
+
+            if (matchesDate && matchesCat && isPending) {
+                const docName = doc.name;
+                const updateUrl = `https://firestore.googleapis.com/v1/${docName}?updateMask.fieldPaths=status`;
+                const patchRes = await fetch(updateUrl, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        fields: {
+                            status: { stringValue: 'deleted' }
+                        }
+                    })
+                });
+                if (patchRes.ok) {
                     canceledCount++;
                 }
             }
@@ -173,9 +230,9 @@ async function cancelTasksInFirestore(category, date) {
     return canceledCount;
 }
 
-// Helper: Process input with Gemini models (with fallback)
+// Helper: Process input with Gemini models (fastest first with fallback)
 async function processWithGemini(inputPart, mimeType = null) {
-    const models = ['gemini-1.5-flash', 'gemini-3.6-flash', 'gemini-1.5-pro'];
+    const models = ['gemini-1.5-flash', 'gemini-2.5-flash', 'gemini-1.5-pro'];
     let lastError = null;
 
     for (const m of models) {
@@ -210,7 +267,13 @@ async function processWithGemini(inputPart, mimeType = null) {
 
 export default async function handler(req, res) {
     if (req.method === 'GET') {
-        return res.status(200).json({ status: 'active', service: 'Kabun Farm 24/7 Telegram Webhook' });
+        return res.status(200).json({
+            status: 'active',
+            service: 'Kabun Farm 24/7 Telegram Webhook',
+            hasTelegramToken: !!TELEGRAM_TOKEN,
+            hasGeminiKey: !!GEMINI_API_KEY,
+            firestoreProject: FIRESTORE_PROJECT_ID
+        });
     }
 
     if (req.method !== 'POST') {
@@ -246,6 +309,10 @@ I log everything straight into your Kabun Farm PWA! 🚀`);
         const fileId = msg.voice ? msg.voice.file_id : msg.audio.file_id;
         const mimeType = msg.voice ? (msg.voice.mime_type || 'audio/ogg') : (msg.audio.mime_type || 'audio/mp3');
 
+        // Immediate visual feedback to user
+        await sendChatAction(chatId, 'record_voice');
+        const statusMsgId = await sendTelegramMessage(chatId, '⏳ *Menganalisis rakaman suara...*\n_Gemini AI is processing your voice note..._');
+
         try {
             const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getFile?file_id=${fileId}`);
             const fileData = await fileRes.json();
@@ -259,22 +326,26 @@ I log everything straight into your Kabun Farm PWA! 🚀`);
             const audioBuffer = Buffer.from(arrayBuf);
 
             const parsed = await processWithGemini(audioBuffer, mimeType);
-            await recordAndReply(chatId, parsed);
+            await recordAndReply(chatId, parsed, statusMsgId);
         } catch (err) {
             console.error('Voice processing error:', err);
-            await sendTelegramMessage(chatId, `⚠️ *Could not process voice note:* ${err.message}`);
+            await editTelegramMessage(chatId, statusMsgId, `⚠️ *Gagal memproses audio / Processing error:*\n_${err.message}_`);
         }
         return res.status(200).send('OK');
     }
 
     // 3. Handle Text Messages
     if (msg.text && !msg.text.startsWith('/')) {
+        // Immediate visual feedback to user
+        await sendChatAction(chatId, 'typing');
+        const statusMsgId = await sendTelegramMessage(chatId, '⏳ *Memproses log...*\n_Extracting farm data..._');
+
         try {
             const parsed = await processWithGemini(msg.text);
-            await recordAndReply(chatId, parsed);
+            await recordAndReply(chatId, parsed, statusMsgId);
         } catch (err) {
             console.error('Text processing error:', err);
-            await sendTelegramMessage(chatId, `⚠️ *Could not parse message:* ${err.message}`);
+            await editTelegramMessage(chatId, statusMsgId, `⚠️ *Gagal memproses teks / Parsing error:*\n_${err.message}_`);
         }
         return res.status(200).send('OK');
     }
@@ -282,8 +353,8 @@ I log everything straight into your Kabun Farm PWA! 🚀`);
     return res.status(200).send('OK');
 }
 
-// Helper: Record to Firestore and send receipt reply
-async function recordAndReply(chatId, record) {
+// Helper: Record to Firestore and send receipt reply (updates statusMsgId in place)
+async function recordAndReply(chatId, record, messageId = null) {
     const today = new Date().toISOString().slice(0, 10);
     const date = record.date || today;
 
@@ -311,7 +382,7 @@ async function recordAndReply(chatId, record) {
 📅 *Date:* ${date}
 ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
 
-        await sendTelegramMessage(chatId, reply);
+        await editTelegramMessage(chatId, messageId, reply);
 
     } else if (record.type === 'activity') {
         const id = 'log_' + Date.now();
@@ -340,7 +411,7 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
 ${activityDoc.cropName ? `🌱 *Crop:* ${activityDoc.cropName}\n` : ''}${activityDoc.weight ? `⚖️ *Harvested Weight:* ${activityDoc.weight} kg\n` : ''}${activityDoc.inputsUsed ? `🧪 *Inputs:* ${activityDoc.inputsUsed}\n` : ''}${activityDoc.costRM ? `💵 *Cost:* RM ${parseFloat(activityDoc.costRM).toFixed(2)}\n` : ''}📅 *Date:* ${date}
 ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
 
-        await sendTelegramMessage(chatId, reply);
+        await editTelegramMessage(chatId, messageId, reply);
 
     } else if (record.type === 'cancel_task') {
         const cat = record.category || 'all';
@@ -354,7 +425,7 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
 🔢 *Tasks Canceled:* ${count > 0 ? count : 'Checked (no pending tasks found)'}
 ✅ *Synced to Kabun Farm PWA!*`;
 
-        await sendTelegramMessage(chatId, reply);
+        await editTelegramMessage(chatId, messageId, reply);
 
     } else if (record.type === 'schedule_task') {
         const id = 'task_' + Date.now();
@@ -382,6 +453,6 @@ ${icon} *Category:* ${catLabel}
 ${taskDoc.note ? `📝 *Note:* ${taskDoc.note}\n` : ''}📅 *Date:* ${date}
 ${ok ? '✅ *Synced to Planning Tab!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
 
-        await sendTelegramMessage(chatId, reply);
+        await editTelegramMessage(chatId, messageId, reply);
     }
 }
