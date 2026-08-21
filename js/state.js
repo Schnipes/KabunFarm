@@ -61,51 +61,51 @@ export const TIME_SLOT_SHORT = { Morning: "Morn", Afternoon: "Aft", Evening: "Ev
 
 export const DEFAULT_FORMULAS = [
     {
-        id: "f_bio_botava",
-        name: "Bio-Botanical Pest Shield",
+        id: "f_bio_shield",
+        name: "Weekly Preventive Bio-Shield",
         category: "Biological",
-        description: "General preventive foliar spray for soft-bodied insects, whiteflies, and aphids. Apply early morning or late evening.",
-        recipe: "Bio Botava:2.5:ml|Garlic Oil Extract:2:ml",
+        description: "General organic preventive shield against whiteflies, aphids, thrips, and foliar fungal spores. Apply late evening (>5:30 PM).",
+        recipe: "KMB Bio Botava:2.5:ml|Garlic Oil Extract:1.5:ml|Wood Vinegar:2:ml",
         status: "active"
     },
     {
-        id: "f_pest_guard",
-        name: "Pest Guard Contact Spray",
+        id: "f_veg_boost",
+        name: "Vegetative & Stress Recovery Mix",
+        category: "Nutrition",
+        description: "Foliar amino acid & cytokinin boost for vigorous leafy vegetative growth, transplant recovery, and post-stress revival.",
+        recipe: "KMB Amino 18:2:ml|Seaweed Extract:1.5:ml",
+        status: "active"
+    },
+    {
+        id: "f_bloom_set",
+        name: "Bloom & Fruit Set Booster",
+        category: "Nutrition",
+        description: "Prevents blossom end rot and fruit drop; reinforces plant cell walls and flowering retention in fruiting crops.",
+        recipe: "Wira CalBo:2:ml|Seaweed Extract:1:ml",
+        status: "active"
+    },
+    {
+        id: "f_caterpillar_guard",
+        name: "Caterpillar & Borer Contact Spray",
         category: "Botanical",
-        description: "Broad-spectrum organic contact deterrent for caterpillars, thrips, and beetles.",
-        recipe: "Pest Guard 2:3:ml|Garlic Oil Extract:1.5:ml",
+        description: "Targeted contact deterrent for leaf-eating caterpillars, armyworms, flea beetles, and diamondback moths.",
+        recipe: "KMB Pest Guard 2:3:ml|Garlic Oil Extract:1.5:ml",
         status: "active"
     },
     {
-        id: "f_amino_18",
-        name: "Foliar Growth & Stress Mix",
-        category: "Nutrition",
-        description: "Vegetative boost, root enhancement, and recovery after heavy rain, pest attacks, or transplanting.",
-        recipe: "Amino 18:2:ml",
+        id: "f_mite_neem",
+        name: "Mite & Sucking Pest Knockdown",
+        category: "Botanical",
+        description: "Organic emulsion for spider mites, whiteflies, and aphids. Spray under leaves late in the evening.",
+        recipe: "Neem Oil:5:ml|Garlic Oil Extract:1.5:ml",
         status: "active"
     },
     {
-        id: "f_wira_calbo",
-        name: "Calcium-Boron Bloom & Fruit Set",
-        category: "Nutrition",
-        description: "Prevents blossom end rot and fruit cracking, strengthens cell walls, and improves flowering retention.",
-        recipe: "Wira CalBo:2:ml",
-        status: "active"
-    },
-    {
-        id: "f_root_plus",
-        name: "Root Drench & Inoculant",
-        category: "Biological",
-        description: "Soil drench for seedling establishment, transplant shock mitigation, and root zone colonization.",
-        recipe: "Root Plus:2:ml|Amino 18:1:ml",
-        status: "active"
-    },
-    {
-        id: "f_fungi_clear",
-        name: "Bio-Fungicide Leaf Guard",
+        id: "f_fungal_shield",
+        name: "Fungal Shield (Antracol Protectant)",
         category: "Fungicide",
-        description: "Preventive bio-fungal spray for powdery mildew, downy mildew, and leaf spots. Apply during high humidity.",
-        recipe: "Bio FungiClear:2:ml",
+        description: "FRAC M02 multi-site protectant for anthracnose and leaf spots. Notice: 7-day Pre-Harvest Interval (PHI).",
+        recipe: "Antracol:2:g",
         status: "active"
     }
 ];
