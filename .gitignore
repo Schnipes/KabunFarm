@@ -5,3 +5,7 @@ Thumbs.db
 # Firebase credentials & dependencies
 *serviceAccountKey*.json
 node_modules/
+bot/node_modules/
+.env
+*.env
+.env.*

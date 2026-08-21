@@ -1,0 +1,15 @@
+{
+  "name": "kabun-telegram-bot",
+  "version": "1.0.0",
+  "description": "Multilingual Voice & Text Logging Bot for Kabun Farm",
+  "main": "bot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "node-telegram-bot-api": "^0.66.0",
+    "@google/generative-ai": "^0.24.0",
+    "dotenv": "^16.4.7"
+  }
+}
