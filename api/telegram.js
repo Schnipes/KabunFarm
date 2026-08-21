@@ -13,15 +13,15 @@ const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 const SYSTEM_PROMPT = `
 You are the AI Farm Intelligence Assistant for Kabun Farm.
-Your job is to parse voice messages or text sent by farmers and extract structured farm activity logs or sales records.
+Your job is to parse voice messages or text sent by farmers and extract structured farm activity logs, sales records, or planning commands.
 
 Users may speak or type in:
-- Bahasa Melayu (Standard or Colloquial: "Dah kutip terung batas 2 dapat 15 kilo", "Jual terung 30kg RM5/kg", "Batas 3 dah siram air")
-- Manglish / English ("Harvested 20kg red amaranth bed 4", "Sold 10kg chili to restaurant RM8 per kg")
-- Indonesian ("Sudah petik terong 12 kilo bed 1")
-- Chinese ("今天二号床采收了15公斤茄子")
+- Bahasa Melayu (Standard or Colloquial: "Dah kutip terung batas 2 dapat 15 kilo", "Jual terung 30kg RM5/kg", "Batas 3 dah siram air", "Batalkan plan racun hari ni", "Cancel plan spray")
+- Manglish / English ("Harvested 20kg red amaranth bed 4", "Sold 10kg chili RM8 per kg", "Cancel watering plan for today", "Plan spray EM4 for tomorrow morning")
+- Indonesian ("Sudah petik terong 12 kilo bed 1", "Batal jadwal siram hari ini")
+- Chinese ("今天二号床采收了15公斤茄子", "取消今天的打药计划")
 
-Extract the intent and return ONLY a valid JSON object matching one of these two schemas:
+Extract the intent and return ONLY a valid JSON object matching one of these 4 schemas:
 
 SCHEMA 1: SALE LOG
 {
@@ -35,7 +35,7 @@ SCHEMA 1: SALE LOG
   "date": "YYYY-MM-DD"
 }
 
-SCHEMA 2: FARM ACTIVITY LOG (harvest, watering, pest_control, sowing)
+SCHEMA 2: FARM ACTIVITY LOG (COMPLETED work: harvest, watering, pest_control, sowing)
 {
   "type": "activity",
   "category": "harvest" | "watering" | "pest_control" | "sowing",
@@ -44,6 +44,25 @@ SCHEMA 2: FARM ACTIVITY LOG (harvest, watering, pest_control, sowing)
   "weight": 15.0, // only for harvest in kg
   "inputsUsed": "e.g. EM4 Foliar Spray, Neem Oil, etc.",
   "costRM": 0.00, // optional cost
+  "date": "YYYY-MM-DD"
+}
+
+SCHEMA 3: CANCEL / DELETE PLANNED TASK
+(Trigger words: "cancel plan", "batalkan plan", "batal jadual", "delete task", "tak jadi spray", "cancel watering")
+{
+  "type": "cancel_task",
+  "category": "pest_control" | "watering" | "harvest" | "sowing" | "all",
+  "date": "YYYY-MM-DD"
+}
+
+SCHEMA 4: SCHEDULE / ADD PLANNED TASK
+(Trigger words: "plan spray for tomorrow", "jadualkan siram", "schedule harvest", "set task")
+{
+  "type": "schedule_task",
+  "category": "pest_control" | "watering" | "harvest" | "sowing",
+  "bedNumber": "1", // or "all"
+  "timeSlot": "Morning" | "Evening" | "Anytime",
+  "note": "Description of task or recipe",
   "date": "YYYY-MM-DD"
 }
 
@@ -115,6 +134,45 @@ async function saveToFirestore(collection, id, data) {
     }
 }
 
+// Helper: Cancel / Delete Tasks from Firestore
+async function cancelTasksInFirestore(category, date) {
+    const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/tasks?pageSize=50`;
+    let canceledCount = 0;
+
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        if (!data.documents) return 0;
+
+        for (const doc of data.documents) {
+            const fields = doc.fields || {};
+            const docStatus = fields.status?.stringValue || 'pending';
+            const docDate = fields.date?.stringValue;
+            const docCategory = fields.activityCategory?.stringValue;
+
+            if (docStatus !== 'deleted' && (!date || docDate === date)) {
+                if (category === 'all' || !category || docCategory === category) {
+                    const docPath = doc.name; // projects/kabunfarm/databases/(default)/documents/tasks/task_123
+                    const patchUrl = `https://firestore.googleapis.com/v1/${docPath}?updateMask.fieldPaths=status`;
+                    await fetch(patchUrl, {
+                        method: 'PATCH',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            fields: {
+                                status: { stringValue: 'deleted' }
+                            }
+                        })
+                    });
+                    canceledCount++;
+                }
+            }
+        }
+    } catch (e) {
+        console.error('cancelTasksInFirestore error:', e);
+    }
+    return canceledCount;
+}
+
 // Helper: Process input with Gemini models (with fallback)
 async function processWithGemini(inputPart, mimeType = null) {
     const models = ['gemini-1.5-flash', 'gemini-3.6-flash', 'gemini-1.5-pro'];
@@ -176,6 +234,8 @@ You can send me:
 • 💬 *Text Messages* (e.g. _"Jual terung 25kg RM6 setengah sekilo"_)
 • 🧺 *Harvests* (e.g. _"Kutip bayam merah 10kg batas 2"_)
 • 💧 *Irrigation* (e.g. _"Dah siram batas 1 dan 2"_)
+• 🚫 *Cancel Plan* (e.g. _"Batalkan plan racun hari ni"_)
+• 🗓️ *Schedule Task* (e.g. _"Plan spray EM4 esok pagi"_)
 
 I log everything straight into your Kabun Farm PWA! 🚀`);
         return res.status(200).send('OK');
@@ -187,7 +247,6 @@ I log everything straight into your Kabun Farm PWA! 🚀`);
         const mimeType = msg.voice ? (msg.voice.mime_type || 'audio/ogg') : (msg.audio.mime_type || 'audio/mp3');
 
         try {
-            // Get file URL from Telegram
             const fileRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getFile?file_id=${fileId}`);
             const fileData = await fileRes.json();
             if (!fileData.ok || !fileData.result.file_path) {
@@ -280,6 +339,48 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
 📍 *Scope:* ${activityDoc.bedNumber === 'all' ? 'Whole Farm' : 'Bed ' + activityDoc.bedNumber}
 ${activityDoc.cropName ? `🌱 *Crop:* ${activityDoc.cropName}\n` : ''}${activityDoc.weight ? `⚖️ *Harvested Weight:* ${activityDoc.weight} kg\n` : ''}${activityDoc.inputsUsed ? `🧪 *Inputs:* ${activityDoc.inputsUsed}\n` : ''}${activityDoc.costRM ? `💵 *Cost:* RM ${parseFloat(activityDoc.costRM).toFixed(2)}\n` : ''}📅 *Date:* ${date}
 ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
+
+        await sendTelegramMessage(chatId, reply);
+
+    } else if (record.type === 'cancel_task') {
+        const cat = record.category || 'all';
+        const count = await cancelTasksInFirestore(cat, date);
+
+        const catText = cat === 'all' ? 'All scheduled' : cat.replace('_', ' ');
+        const reply = `🚫 *PLAN CANCELED!*
+━━━━━━━━━━━━━━━
+🗑️ *Action:* Removed ${catText} task(s)
+📅 *Date:* ${date}
+🔢 *Tasks Canceled:* ${count > 0 ? count : 'Checked (no pending tasks found)'}
+✅ *Synced to Kabun Farm PWA!*`;
+
+        await sendTelegramMessage(chatId, reply);
+
+    } else if (record.type === 'schedule_task') {
+        const id = 'task_' + Date.now();
+        const taskDoc = {
+            id,
+            date,
+            activityCategory: record.category || 'pest_control',
+            bedScope: record.bedNumber ? String(record.bedNumber) : 'all',
+            timeSlot: record.timeSlot || 'Morning',
+            note: record.note || '',
+            status: 'pending'
+        };
+
+        const ok = await saveToFirestore('tasks', id, taskDoc);
+
+        const icons = { watering: '💧', harvest: '🧺', pest_control: '🐛', sowing: '🌱' };
+        const icon = icons[taskDoc.activityCategory] || '🗓️';
+        const catLabel = taskDoc.activityCategory.toUpperCase().replace('_', ' ');
+
+        const reply = `🗓️ *TASK SCHEDULED!*
+━━━━━━━━━━━━━━━
+${icon} *Category:* ${catLabel}
+📍 *Scope:* ${taskDoc.bedScope === 'all' ? 'Whole Farm' : 'Bed ' + taskDoc.bedScope}
+⏰ *Time Slot:* ${taskDoc.timeSlot}
+${taskDoc.note ? `📝 *Note:* ${taskDoc.note}\n` : ''}📅 *Date:* ${date}
+${ok ? '✅ *Synced to Planning Tab!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
 
         await sendTelegramMessage(chatId, reply);
     }
