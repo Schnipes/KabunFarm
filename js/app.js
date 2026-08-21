@@ -1289,8 +1289,12 @@ export function togglePlotExpand(plotId, event) {
 }
 
 export function openPlotAssignModal(plotId = null) {
-    state.editingPlotId = plotId;
-    const plot = plotId ? getPlot(plotId) : null;
+    const targetPlotId = plotId || state.currentPlotId || state.editingPlotId;
+    if (document.getElementById("plotDetailOverlay")?.classList.contains("open")) {
+        closePlotDetail();
+    }
+    state.editingPlotId = targetPlotId;
+    const plot = targetPlotId ? getPlot(targetPlotId) : null;
     document.getElementById("plotModalTitle").textContent = plot ? "Edit Plot" : "New Plot";
     document.getElementById("plotSubmitBtn").textContent  = plot ? "Save changes" : "Save plot";
     document.getElementById("plotName").value = plot ? plot.name : "";
@@ -1299,8 +1303,8 @@ export function openPlotAssignModal(plotId = null) {
     const list = document.getElementById("plotBedChecklist");
     if (list) {
         list.innerHTML = state.bedsData.map(b => {
-            const checked = plotId && String(b.plotId || "") === String(plotId);
-            const otherPlot = b.plotId && String(b.plotId) !== String(plotId) ? getPlot(b.plotId) : null;
+            const checked = targetPlotId && String(b.plotId || "") === String(targetPlotId);
+            const otherPlot = b.plotId && String(b.plotId) !== String(targetPlotId) ? getPlot(b.plotId) : null;
             const note = otherPlot ? ` <span style="color:#888;">(currently in ${escapeHtml(otherPlot.name)})</span>` : "";
             return `
             <label class="harvest-crop-check">
