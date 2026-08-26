@@ -3,12 +3,17 @@
 // Visit: https://<your-vercel-domain>/api/set-webhook?key=<your-secret-or-setup-key>
 // ============================================================================
 
+function cleanSecret(s) {
+    if (!s) return '';
+    return String(s).trim().replace(/^["']|["']$/g, '');
+}
+
 const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN;
-const WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || process.env.SETUP_KEY;
+const WEBHOOK_SECRET = cleanSecret(process.env.TELEGRAM_WEBHOOK_SECRET || process.env.SETUP_KEY);
 
 export default async function handler(req, res) {
     // Basic protection: require key query param if secret is configured in env
-    const providedKey = req.query?.key || req.headers['x-setup-key'];
+    const providedKey = cleanSecret(req.query?.key || req.headers['x-setup-key']);
     if (WEBHOOK_SECRET && providedKey !== WEBHOOK_SECRET) {
         return res.status(401).json({
             error: "Unauthorized. Pass your secret via query param: ?key=YOUR_SECRET"
@@ -24,19 +29,25 @@ export default async function handler(req, res) {
     const webhookUrl = `${proto}://${host}/api/telegram`;
 
     try {
+        const secret = cleanSecret(process.env.TELEGRAM_WEBHOOK_SECRET);
         let setUrl = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/setWebhook?url=${encodeURIComponent(webhookUrl)}`;
-        if (process.env.TELEGRAM_WEBHOOK_SECRET) {
-            setUrl += `&secret_token=${encodeURIComponent(process.env.TELEGRAM_WEBHOOK_SECRET)}`;
+        if (secret) {
+            setUrl += `&secret_token=${encodeURIComponent(secret)}`;
         }
 
         const tgRes = await fetch(setUrl);
         const data = await tgRes.json();
 
+        // Also fetch current webhook info for immediate diagnosis
+        const infoRes = await fetch(`https://api.telegram.org/bot${TELEGRAM_TOKEN}/getWebhookInfo`);
+        const infoData = await infoRes.json();
+
         return res.status(200).json({
             message: "Telegram Webhook Setup Result",
             registeredUrl: webhookUrl,
-            hasSecretToken: !!process.env.TELEGRAM_WEBHOOK_SECRET,
-            telegramResponse: data
+            hasSecretToken: !!secret,
+            telegramResponse: data,
+            webhookInfo: infoData
         });
     } catch (e) {
         return res.status(500).json({ error: e.message });

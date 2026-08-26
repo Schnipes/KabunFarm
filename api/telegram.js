@@ -441,6 +441,11 @@ async function processPhotoDiagnosis(photoBuffer, mimeType = 'image/jpeg', userC
     throw lastError || new Error('All Vision model attempts failed');
 }
 
+function cleanSecret(s) {
+    if (!s) return '';
+    return String(s).trim().replace(/^["']|["']$/g, '');
+}
+
 export default async function handler(req, res) {
     if (req.method === 'GET') {
         return res.status(200).json({
@@ -454,9 +459,9 @@ export default async function handler(req, res) {
     }
 
     // 1. Webhook Secret Token Verification
-    const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    const expectedSecret = cleanSecret(process.env.TELEGRAM_WEBHOOK_SECRET);
     if (expectedSecret) {
-        const incomingSecret = req.headers['x-telegram-bot-api-secret-token'];
+        const incomingSecret = cleanSecret(req.headers['x-telegram-bot-api-secret-token']);
         if (incomingSecret !== expectedSecret) {
             console.warn('Unauthorized webhook call — secret mismatch');
             return res.status(403).json({ error: 'Forbidden' });
@@ -469,7 +474,10 @@ export default async function handler(req, res) {
     }
 
     const msg = update.message;
-    const chatId = msg.chat.id;
+    const chatId = msg.chat?.id;
+    if (!chatId) {
+        return res.status(200).send('OK');
+    }
 
     // 2. Chat ID Authorization Check
     const allowedChatIdsStr = process.env.ALLOWED_CHAT_IDS;
