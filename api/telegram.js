@@ -594,28 +594,6 @@ All logs sync directly to your Kabun Farm PWA! 🚀`);
     return res.status(200).send('OK');
 }
 
-// Helper: Format Diagnosis Response & Handle Auto-Scheduling
-async function formatAndReplyDiagnosis(chatId, diag, messageId) {
-    const today = new Date().toISOString().slice(0, 10);
-    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
-
-    if (diag.isIncurable) {
-        const alertMsg = `🚨 *DIAGNOSIS: ${diag.issue.toUpperCase()}*
-━━━━━━━━━━━━━━━
-🌱 *Crop:* ${diag.crop || 'Plant'} | *Confidence:* ${diag.confidence || 'Medium'}
-⚠️ *Symptom:* ${diag.symptoms}
-
-🚫 *DO NOT SPRAY:*
-This is an incurable viral/vascular disease. Sprays cannot heal infected plants.
-
-🚨 *MANDATORY ACTION:*
-*Rogue (pull out & destroy)* this plant immediately to prevent spreading to neighboring beds!
-${diag.bedNumber ? `📍 *Location:* Bed ${diag.bedNumber}` : ''}`;
-
-        await editTelegramMessage(chatId, messageId, alertMsg);
-        return;
-    }
-
 // Helper: Clean and normalize bed number / plot strings
 function normalizeBedScope(raw) {
     if (!raw || raw === 'all' || raw === 'Whole Farm' || raw === 'null') return 'all';
