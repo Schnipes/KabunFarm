@@ -1,4 +1,5 @@
-import admin from 'firebase-admin';
+import { initializeApp, cert, getApps } from 'firebase-admin/app';
+import { getFirestore } from 'firebase-admin/firestore';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Extend Vercel serverless execution limit for audio/image processing
@@ -17,7 +18,7 @@ let lastFirestoreSaveError = null;
 function getAdminFirestore() {
     if (adminDb) return adminDb;
     try {
-        if (!admin.apps || !admin.apps.length) {
+        if (!getApps().length) {
             const rawSA = process.env.FIREBASE_SERVICE_ACCOUNT;
             if (!rawSA) {
                 lastAdminInitError = 'FIREBASE_SERVICE_ACCOUNT env variable is missing in Vercel';
@@ -38,8 +39,8 @@ function getAdminFirestore() {
                 if (typeof serviceAccount.private_key === 'string') {
                     serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
                 }
-                admin.initializeApp({
-                    credential: admin.credential.cert(serviceAccount),
+                initializeApp({
+                    credential: cert(serviceAccount),
                     projectId: serviceAccount.project_id || FIRESTORE_PROJECT_ID
                 });
             } else {
@@ -48,10 +49,10 @@ function getAdminFirestore() {
                 return null;
             }
         }
-        adminDb = admin.firestore();
+        adminDb = getFirestore();
         return adminDb;
     } catch (e) {
-        lastAdminInitError = 'admin.initializeApp error: ' + (e.message || String(e));
+        lastAdminInitError = 'initializeApp error: ' + (e.message || String(e));
         console.error('Firebase Admin init error:', e.message || e);
         return null;
     }
