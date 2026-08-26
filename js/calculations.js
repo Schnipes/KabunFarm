@@ -43,7 +43,7 @@ export function latestPlotWatering(plotId) {
 }
 
 export function getWateringStatus(bed) {
-    if (!bed || bed.status === "fallow" || bed.status === "retired") {
+    if (!bed || bed.status === "fallow" || bed.status === "retired" || !bed.crops || bed.crops.length === 0) {
         return { needsWater: false, days: null };
     }
 

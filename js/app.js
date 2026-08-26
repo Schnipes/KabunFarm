@@ -43,6 +43,7 @@ import {
 
 export {
     getDb,
+    waitForAuth,
     checkPin,
     updateSyncBadge,
     handleSyncBadgeClick,
@@ -66,6 +67,7 @@ export {
 
 import {
     getDb,
+    waitForAuth,
     checkPin,
     updateSyncBadge,
     handleSyncBadgeClick,
@@ -275,6 +277,7 @@ export function closeModal() {
     document.getElementById("logForm")?.reset();
     syncActivityCategoryPills("");
     state.selectedQuickFormulaId = null;
+    state.lastAutoPopulatedFormulaText = null;
     document.getElementById("currentCropsField").hidden  = true;
     document.getElementById("harvestCropsField").hidden  = true;
     document.getElementById("harvestWeightField").hidden = true;
@@ -1492,7 +1495,12 @@ export async function initApp() {
     window.addEventListener("online", updateSyncBadge);
     window.addEventListener("offline", updateSyncBadge);
 
-    // Initial Data Fetch
+    // Initial Data Fetch & Auth Handshake
+    try {
+        await waitForAuth();
+    } catch (e) {
+        console.warn("Auth initialization note:", e);
+    }
     await fetchPlots();
     await Promise.all([fetchBeds(), fetchFormulas(), fetchWeather(), fetchTasks()]);
 

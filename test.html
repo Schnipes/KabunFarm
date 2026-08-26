@@ -82,12 +82,16 @@
   <div id="newCropField"></div>
   <div id="bedContextBar"></div>
   <div id="quickFormulaSection"></div>
+  <div id="quickFormulaChips"></div>
   <div id="quickFormulaDoseCard"></div>
+  <div id="logSprayerTotalDisplay"></div>
   <div id="inputsField"></div>
+  <textarea id="inputsUsed"></textarea>
+  <input id="logSprayerVol" value="16">
+  <input id="logTankCount" value="1">
   <div id="financialsField"></div>
   <div id="toggleInputsBtn"></div>
   <div id="toggleFinancialsBtn"></div>
-  <input id="logTankCount">
   <input id="newCropName">
   <input id="saleCrop">
   <input id="saleQty">
@@ -134,7 +138,7 @@
   // Re-expose to local test scope
   const { ymd, localDateStr, todayString, daysSince, escapeHtml, normalizeCropName, getCategoryColor, getCategoryColorMap, tintStyle, weatherIcon, lastActivityLabel, resolveTaskScopeMeta, resolveLogScopeLabel, getBed, getPlot, bedsInPlot, dateGroupLabel, DEFAULT_FORMULAS, findNextAvailableBedNumber, LOGS_CACHE_KEY } = State;
   const { wateringAlert, latestWholeFarmWatering, latestPlotWatering, getWateringStatus, plotWateringRollup, groupByPlot, parseRecipe, renderIngredients, csvEscape, computeCropPL, calcSaleTotal, calculateCropProgress, calculateDailyMomentum, evaluateSprayWindow } = Calc;
-  const { planDayLabel, renderTaskCard, renderFarmMomentum, formatBedRange, renderPlotCard } = Views;
+  const { planDayLabel, renderTaskCard, renderFarmMomentum, formatBedRange, renderPlotCard, selectQuickFormula, updateQuickFormulaDosePreview, onSprayerParamChange } = Views;
   const { setDatePreset, syncDatePresets, addBed, bulkAddBeds, quickWaterBed, toggleBedFallow, restoreBed, deleteBed, deleteTask, editPlantingDate, togglePlotExpand, openFormulaModal, addIngredientRow, handleFormulaSubmit, deleteFormula, saveBedName, saveBedPlot, stepTankCount, toggleSelectAllBeds } = App;
 
   // Sync window proxies with local test scope
@@ -1108,6 +1112,94 @@
     assertEqual(State.state.formulasData[0].name, "Updated Mix");
     assertEqual(State.state.formulasData[0].recipe, "Amino 18:2:ml|Neem Oil:3.5:ml");
     assertEqual(State.state.editingFormulaIndex, null);
+  });
+
+  // ---------------------------------------------------------------------
+  group("Scope & Bed Normalization (Telegram bot & PWA compatibility)");
+
+  test("resolveTaskScopeMeta handles bedScope, bedNumber, and plot prefixes", () => {
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "2" }), "Bed 2");
+    assertEqual(resolveTaskScopeMeta({ bedScope: "3" }), "Bed 3");
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "batas 4" }), "Bed 4");
+    assertEqual(resolveTaskScopeMeta({ bedScope: "bed 5" }), "Bed 5");
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "all" }), "Whole Farm");
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "Plot A" }), "🗂️ Plot A");
+    assertEqual(resolveTaskScopeMeta({ bedNumber: "Blok 1" }), "🗂️ Blok 1");
+    assertEqual(resolveTaskScopeMeta(null), "Whole Farm");
+  });
+
+  test("resolveLogScopeLabel handles bedScope, bedNumber, and plot prefixes", () => {
+    assertEqual(resolveLogScopeLabel({ bedNumber: "2" }), "Bed 2");
+    assertEqual(resolveLogScopeLabel({ bedScope: "3" }), "Bed 3");
+    assertEqual(resolveLogScopeLabel({ bedNumber: "batas 4" }), "Bed 4");
+    assertEqual(resolveLogScopeLabel({ bedScope: "bed 5" }), "Bed 5");
+    assertEqual(resolveLogScopeLabel({ bedNumber: "all" }), "Whole Farm");
+    assertEqual(resolveLogScopeLabel({ bedNumber: "Plot A" }), "Plot A");
+  });
+
+  test("getBed correctly resolves bed numbers with 'batas' or 'bed' prefixes", () => {
+    State.state.bedsData = [
+      { bedNumber: "1", name: "Alpha", crops: [] },
+      { bedNumber: "2", name: "Beta", crops: [] }
+    ];
+    assertEqual(getBed("2").name, "Beta");
+    assertEqual(getBed("batas 2").name, "Beta");
+    assertEqual(getBed("bed 1").name, "Alpha");
+    assertEqual(getBed("99"), undefined);
+  });
+
+  // ---------------------------------------------------------------------
+  group("Quick Formula Recipe Multi-Selection & Recalculation");
+
+  test("switching between recipes updates inputsUsed to the latest selected recipe", () => {
+    State.state.formulasData = [
+      { id: "f_neem", name: "Neem Oil Spray", recipe: "Neem Oil:5:ml", status: "active" },
+      { id: "f_botava", name: "KMB Bio Botava", recipe: "KMB Bio Botava:2.5:ml", status: "active" },
+      { id: "f_calbo", name: "Wira CalBo", recipe: "Wira CalBo:2:ml", status: "active" }
+    ];
+    document.getElementById("logSprayerVol").value = "16";
+    document.getElementById("logTankCount").value = "1";
+
+    // 1. Select first recipe (Neem Oil)
+    selectQuickFormula("f_neem");
+    const inputEl = document.getElementById("inputsUsed");
+    assertTrue(inputEl.value.includes("Neem Oil Spray"), "First recipe logged");
+    assertTrue(inputEl.value.includes("Neem Oil: 80ml"), "First recipe dosage calculated");
+
+    // 2. Select second recipe (Bio Botava) -> must overwrite first
+    selectQuickFormula("f_botava");
+    assertTrue(inputEl.value.includes("KMB Bio Botava"), "Second recipe overwritten");
+    assertTrue(inputEl.value.includes("KMB Bio Botava: 40ml"), "Second recipe dosage calculated");
+    assertTrue(!inputEl.value.includes("Neem Oil"), "First recipe removed");
+
+    // 3. Select third recipe (CalBo) -> must overwrite second
+    selectQuickFormula("f_calbo");
+    assertTrue(inputEl.value.includes("Wira CalBo"), "Third recipe overwritten");
+    assertTrue(inputEl.value.includes("Wira CalBo: 32ml"), "Third recipe dosage calculated");
+
+    // 4. Deselect recipe -> clears auto-populated text
+    selectQuickFormula("f_calbo");
+    assertEqual(inputEl.value, "", "Deselecting formula clears inputs text");
+  });
+
+  test("modifying sprayer tanks dynamically recalculates inputsUsed for active formula", () => {
+    State.state.formulasData = [
+      { id: "f_botava", name: "KMB Bio Botava", recipe: "KMB Bio Botava:2.5:ml", status: "active" }
+    ];
+    document.getElementById("logSprayerVol").value = "16";
+    document.getElementById("logTankCount").value = "1";
+
+    selectQuickFormula("f_botava");
+    const inputEl = document.getElementById("inputsUsed");
+    assertTrue(inputEl.value.includes("16L mix (1x16L)"));
+    assertTrue(inputEl.value.includes("KMB Bio Botava: 40ml"));
+
+    // Step up to 2 tanks (32L)
+    document.getElementById("logTankCount").value = "2";
+    onSprayerParamChange();
+
+    assertTrue(inputEl.value.includes("32L mix (2x16L)"));
+    assertTrue(inputEl.value.includes("KMB Bio Botava: 80ml"));
   });
 
   // ---------------------------------------------------------------------

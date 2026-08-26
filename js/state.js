@@ -133,7 +133,8 @@ export const state = {
     bedDetailReturnPlotId: null,
     archivedBedsData: [],
     showCompletedTasks: false,
-    expandedPlots: {}
+    expandedPlots: {},
+    lastAutoPopulatedFormulaText: null
 };
 
 export function findNextAvailableBedNumber(bedsList) {
@@ -270,32 +271,49 @@ export function lastActivityLabel(lastActivity) {
 }
 
 export function resolveTaskScopeMeta(task) {
-    if (!task || !task.bedNumber) return "Whole Farm";
-    if (String(task.bedNumber).startsWith("plot_")) {
-        const plot = getPlot(task.bedNumber);
+    const raw = task?.bedNumber ?? task?.bedScope;
+    if (!raw) return "Whole Farm";
+    const bn = String(raw).trim();
+    if (!bn || bn.toLowerCase() === "all" || bn.toLowerCase() === "whole farm") return "Whole Farm";
+    if (bn.startsWith("plot_")) {
+        const plot = getPlot(bn);
         return plot ? `🗂️ ${plot.name}` : "Plot";
     }
-    return `Bed ${task.bedNumber}`;
+    if (/^(plot|blok|block)\b/i.test(bn)) {
+        return `🗂️ ${bn}`;
+    }
+    const cleanNum = bn.replace(/^(?:batas|bed|no\.?)\s*/i, "");
+    return `Bed ${cleanNum}`;
 }
 
 export function resolveLogScopeLabel(log) {
-    const bn = String(log?.bedNumber || "");
-    if (!bn || bn === "all") return "Whole Farm";
+    const raw = log?.bedNumber ?? log?.bedScope;
+    if (!raw) return "Whole Farm";
+    const bn = String(raw).trim();
+    if (!bn || bn.toLowerCase() === "all" || bn.toLowerCase() === "whole farm") return "Whole Farm";
     if (bn.startsWith("plot_")) {
         const plot = getPlot(bn);
         return plot ? plot.name : "Plot (deleted)";
     }
-    return `Bed ${bn}`;
+    if (/^(plot|blok|block)\b/i.test(bn)) {
+        return bn;
+    }
+    const cleanNum = bn.replace(/^(?:batas|bed|no\.?)\s*/i, "");
+    return `Bed ${cleanNum}`;
 }
 
 // Bed & Plot Finders
 export function getBed(bedNumber) {
+    if (bedNumber === null || bedNumber === undefined) return undefined;
+    const rawStr = String(bedNumber).trim();
+    if (!rawStr) return undefined;
+    const cleanStr = rawStr.replace(/^(?:batas|bed|no\.?)\s*/i, "").trim();
     const list = (typeof window !== "undefined" && Array.isArray(window.bedsData) && window.bedsData.length) ? window.bedsData : state.bedsData;
-    let found = list.find(b => String(b.bedNumber) === String(bedNumber));
+    let found = list.find(b => String(b.bedNumber) === cleanStr || String(b.bedNumber) === rawStr);
     if (!found && typeof localStorage !== "undefined") {
         try {
             const cached = JSON.parse(localStorage.getItem(BEDS_CACHE_KEY) || "[]");
-            found = cached.find(b => String(b.bedNumber) === String(bedNumber));
+            found = cached.find(b => String(b.bedNumber) === cleanStr || String(b.bedNumber) === rawStr);
         } catch (e) {}
     }
     return found;

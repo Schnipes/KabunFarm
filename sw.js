@@ -1,4 +1,4 @@
-const CACHE_NAME = 'farmlog-cache-20260822a';
+const CACHE_NAME = 'farmlog-cache-20260826a';
 
 const urlsToCache = [
   './',
@@ -6,11 +6,13 @@ const urlsToCache = [
   './style.css',
   './js/state.js',
   './js/calculations.js',
+  './js/resistance.js',
   './js/db.js',
   './js/views.js',
   './js/app.js',
   './manifest.json',
   './scripts/firebase-app-compat.js',
+  './scripts/firebase-auth-compat.js',
   './scripts/firebase-firestore-compat.js'
 ];
 

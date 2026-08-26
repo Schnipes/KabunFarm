@@ -99,6 +99,16 @@ Crop Normalization Rules:
 - sawi -> Choy Sum
 - tomato -> Tomato
 
+Scope & Bed/Plot Normalization Rules:
+- If a specific bed is mentioned ("batas 2", "bed 2", "batas nombor 3", "no 4", "二号床", "bed #5"):
+  extract ONLY the clean numeric digit string (e.g. "2", "3", "4", "5") as "bedNumber".
+- If a plot or block is mentioned ("plot 1", "plot A", "blok A", "plot jambu"):
+  extract the plot name (e.g. "Plot 1", "Plot A", "Blok A") as "bedNumber".
+- If multiple beds are mentioned ("batas 1 dan 2", "bed 3-5"):
+  extract as comma-separated digits (e.g. "1, 2") as "bedNumber".
+- ONLY return "all" if the user explicitly mentions whole farm ("semua batas", "seluruh kebun", "all beds", "whole farm") or mentions NO bed/plot at all.
+- NEVER return "all" if a bed number or plot is specified in the message!
+
 Today's Date: ${new Date().toISOString().slice(0, 10)}.
 Return pure JSON only, without markdown fences or extra explanations.
 `;
@@ -235,6 +245,30 @@ I will log them straight into your Kabun Farm dashboard! 🚀`, { parse_mode: 'M
     }
 });
 
+// Helper: Clean and normalize bed number / plot strings
+function normalizeBedScope(raw) {
+    if (!raw || raw === "all" || raw === "Whole Farm" || raw === "null") return "all";
+    const str = String(raw).trim();
+    if (!str || str.toLowerCase() === "all" || str.toLowerCase() === "whole farm") return "all";
+
+    if (/^(plot|blok|block)\b/i.test(str)) {
+        return str;
+    }
+
+    const bedMatch = str.match(/^(?:batas|bed|no\.?|nombor)?\s*(\d+(?:\s*,\s*\d+)*)$/i);
+    if (bedMatch) {
+        return bedMatch[1].replace(/\s+/g, '');
+    }
+
+    const digitMatch = str.match(/(?:batas|bed|no\.?)\s*(\d+)/i);
+    if (digitMatch) {
+        return digitMatch[1];
+    }
+
+    const cleaned = str.replace(/^(?:batas|bed)\s*/i, '').trim();
+    return cleaned || "all";
+}
+
 // Format and Save Parsed Data
 async function handleParsedRecord(chatId, record) {
     const today = new Date().toISOString().slice(0, 10);
@@ -268,11 +302,13 @@ ${ok ? "✅ *Synced to Kabun Farm PWA!*" : "⚠️ *Saved locally, syncing to cl
 
     } else if (record.type === "activity") {
         const id = "log_" + Date.now();
+        const cleanBed = normalizeBedScope(record.bedNumber);
         const activityDoc = {
             id,
             date,
             activityCategory: record.category || "watering",
-            bedNumber: record.bedNumber ? String(record.bedNumber) : "all",
+            bedNumber: cleanBed,
+            bedScope: cleanBed,
             cropName: record.cropName || "",
             inputsUsed: record.inputsUsed || "",
             costRM: record.costRM ? String(record.costRM) : "",
@@ -286,10 +322,11 @@ ${ok ? "✅ *Synced to Kabun Farm PWA!*" : "⚠️ *Saved locally, syncing to cl
         const icons = { watering: "💧", harvest: "🧺", pest_control: "🐛", sowing: "🌱" };
         const icon = icons[activityDoc.activityCategory] || "📝";
         const catLabel = activityDoc.activityCategory.toUpperCase().replace('_', ' ');
+        const scopeText = cleanBed === "all" ? "Whole Farm" : (/^(plot|blok|block)\b/i.test(cleanBed) ? cleanBed : `Bed ${cleanBed}`);
 
         const reply = `${icon} *${catLabel} RECORDED!*
 ━━━━━━━━━━━━━━━
-📍 *Scope:* ${activityDoc.bedNumber === "all" ? "Whole Farm" : "Bed " + activityDoc.bedNumber}
+📍 *Scope:* ${scopeText}
 ${activityDoc.cropName ? `🌱 *Crop:* ${activityDoc.cropName}\n` : ""}${activityDoc.weight ? `⚖️ *Harvested Weight:* ${activityDoc.weight} kg\n` : ""}${activityDoc.inputsUsed ? `🧪 *Inputs:* ${activityDoc.inputsUsed}\n` : ""}${activityDoc.costRM ? `💵 *Cost:* RM ${parseFloat(activityDoc.costRM).toFixed(2)}\n` : ""}📅 *Date:* ${date}
 ${ok ? "✅ *Synced to Kabun Farm PWA!*" : "⚠️ *Saved locally, syncing to cloud...*"}`;
 

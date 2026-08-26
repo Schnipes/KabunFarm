@@ -54,6 +54,52 @@ export const firebaseConfig = {
 };
 
 let db = null;
+let authPromise = null;
+
+export function waitForAuth() {
+    if (authPromise) return authPromise;
+    if (typeof firebase === "undefined" || typeof firebase.auth !== "function") {
+        return Promise.resolve(null);
+    }
+    authPromise = new Promise((resolve) => {
+        try {
+            if (!firebase.apps || !firebase.apps.length) {
+                firebase.initializeApp(firebaseConfig);
+            }
+            const auth = firebase.auth();
+            let resolved = false;
+            const unsubscribe = auth.onAuthStateChanged((user) => {
+                if (user && !resolved) {
+                    resolved = true;
+                    if (typeof unsubscribe === "function") unsubscribe();
+                    resolve(user);
+                } else if (!user && !resolved) {
+                    auth.signInAnonymously().catch(err => {
+                        console.warn("Anonymous auth note:", err?.message || err);
+                        if (!resolved) {
+                            resolved = true;
+                            if (typeof unsubscribe === "function") unsubscribe();
+                            resolve(null);
+                        }
+                    });
+                }
+            });
+            // 3-second fallback for offline / disconnected environments
+            setTimeout(() => {
+                if (!resolved) {
+                    resolved = true;
+                    if (typeof unsubscribe === "function") unsubscribe();
+                    resolve(auth.currentUser || null);
+                }
+            }, 3000);
+        } catch (e) {
+            console.warn("waitForAuth initialization note:", e);
+            resolve(null);
+        }
+    });
+    return authPromise;
+}
+
 export function getDb() {
     if (db) return db;
     if (typeof firebase !== "undefined") {
@@ -76,6 +122,9 @@ export function getDb() {
     }
 }
 getDb();
+if (typeof window !== "undefined") {
+    waitForAuth();
+}
 
 // --- Auth & PIN Verification ---
 export async function checkPin() {

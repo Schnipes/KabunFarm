@@ -9,3 +9,7 @@ bot/node_modules/
 .env
 *.env
 .env.*
+
+# Test artifacts
+test-results/
+playwright-report/

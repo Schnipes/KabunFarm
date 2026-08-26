@@ -634,6 +634,10 @@ export function updateQuickFormulaDosePreview() {
     const inputsUsed = document.getElementById("inputsUsed");
     if (!state.selectedQuickFormulaId) {
         if (card) card.hidden = true;
+        if (inputsUsed && state.lastAutoPopulatedFormulaText && inputsUsed.value === state.lastAutoPopulatedFormulaText) {
+            inputsUsed.value = "";
+        }
+        state.lastAutoPopulatedFormulaText = null;
         return;
     }
     const formula = state.formulasData.find(f => String(f.id) === String(state.selectedQuickFormulaId));
@@ -668,17 +672,20 @@ export function updateQuickFormulaDosePreview() {
         card.hidden = true;
     }
 
-    if (inputsUsed && !inputsUsed.value) {
+    if (inputsUsed) {
+        let formulaText = "";
         if (ingredients) {
             const parts = ingredients.map(ing => {
                 const total = ing.amount * totalVol;
                 const calc = ing.unit === 'g' ? total.toFixed(1).replace(/\.0$/, '') : (Number.isInteger(total) ? String(total) : total.toFixed(1).replace(/\.0$/, ''));
                 return `${ing.name}: ${calc}${ing.unit}`;
             });
-            inputsUsed.value = `${formula.name} — ${totalVol}L mix (${tankCount}x${tankSize}L)\n${parts.join(", ")}`;
+            formulaText = `${formula.name} — ${totalVol}L mix (${tankCount}x${tankSize}L)\n${parts.join(", ")}`;
         } else {
-            inputsUsed.value = `${formula.name} (${totalVol}L mix)`;
+            formulaText = `${formula.name} (${totalVol}L mix)`;
         }
+        inputsUsed.value = formulaText;
+        state.lastAutoPopulatedFormulaText = formulaText;
     }
 }
 

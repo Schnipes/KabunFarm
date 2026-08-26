@@ -1,8 +1,4 @@
-// ============================================================================
-// Kabun Farm Intelligence — 24/7 Vercel Serverless Telegram Webhook Handler
-// Route: /api/telegram
-// ============================================================================
-
+import admin from 'firebase-admin';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
 // Extend Vercel serverless execution limit for audio/image processing
@@ -13,6 +9,40 @@ const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const FIRESTORE_PROJECT_ID = 'kabunfarm';
 
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+
+let adminDb = null;
+function getAdminFirestore() {
+    if (adminDb) return adminDb;
+    try {
+        if (!admin.apps || !admin.apps.length) {
+            if (process.env.FIREBASE_SERVICE_ACCOUNT) {
+                let serviceAccount;
+                try {
+                    serviceAccount = typeof process.env.FIREBASE_SERVICE_ACCOUNT === 'string'
+                        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
+                        : process.env.FIREBASE_SERVICE_ACCOUNT;
+                } catch (pe) {
+                    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', pe);
+                }
+                if (serviceAccount) {
+                    admin.initializeApp({
+                        credential: admin.credential.cert(serviceAccount),
+                        projectId: FIRESTORE_PROJECT_ID
+                    });
+                } else {
+                    admin.initializeApp({ projectId: FIRESTORE_PROJECT_ID });
+                }
+            } else {
+                admin.initializeApp({ projectId: FIRESTORE_PROJECT_ID });
+            }
+        }
+        adminDb = admin.firestore();
+        return adminDb;
+    } catch (e) {
+        console.error('Firebase Admin init note:', e.message || e);
+        return null;
+    }
+}
 
 const SYSTEM_PROMPT = `
 You are the AI Farm Intelligence Assistant for Kabun Farm.
@@ -94,6 +124,16 @@ Crop Normalization Rules:
 - jagung -> Sweet Corn
 - sawi -> Choy Sum
 - tomato -> Tomato
+
+Scope & Bed/Plot Normalization Rules:
+- If a specific bed is mentioned ("batas 2", "bed 2", "batas nombor 3", "no 4", "二号床", "bed #5"):
+  extract ONLY the clean numeric digit string (e.g. "2", "3", "4", "5") as "bedNumber".
+- If a plot or block is mentioned ("plot 1", "plot A", "blok A", "plot jambu"):
+  extract the plot name (e.g. "Plot 1", "Plot A", "Blok A") as "bedNumber".
+- If multiple beds are mentioned ("batas 1 dan 2", "bed 3-5"):
+  extract as comma-separated digits (e.g. "1, 2") as "bedNumber".
+- ONLY return "all" if the user explicitly mentions whole farm ("semua batas", "seluruh kebun", "all beds", "whole farm") or mentions NO bed/plot at all.
+- NEVER return "all" if a bed number or plot is specified in the message!
 
 Colloquial Price/Weight Rules:
 - "setengah" -> 0.5 (e.g. "RM 6 setengah" = 6.50, "dua kilo setengah" = 2.5)
@@ -214,8 +254,19 @@ async function editTelegramMessage(chatId, messageId, text) {
     }
 }
 
-// Helper: Save document to Firestore via REST
+// Helper: Save document to Firestore via Admin SDK (with REST fallback)
 async function saveToFirestore(collection, id, data) {
+    const adminFirestore = getAdminFirestore();
+    if (adminFirestore) {
+        try {
+            await adminFirestore.collection(collection).doc(id).set(data);
+            return true;
+        } catch (e) {
+            console.error('Admin Firestore save failed, trying REST fallback:', e.message || e);
+        }
+    }
+
+    // Fallback to REST (when Service Account is not configured)
     const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/${collection}?documentId=${id}`;
 
     const fields = {};
@@ -244,9 +295,38 @@ async function saveToFirestore(collection, id, data) {
     }
 }
 
-// Helper: Cancel / Soft-delete planned tasks in Firestore
+// Helper: Cancel / Soft-delete planned tasks in Firestore via Admin SDK (with REST fallback)
 async function cancelTasksInFirestore(category, date) {
     let canceledCount = 0;
+    const adminFirestore = getAdminFirestore();
+
+    if (adminFirestore) {
+        try {
+            let query = adminFirestore.collection('tasks');
+            if (date) query = query.where('date', '==', date);
+            if (category && category !== 'all') query = query.where('activityCategory', '==', category);
+
+            const snap = await query.get();
+            const batch = adminFirestore.batch();
+
+            snap.forEach(doc => {
+                const data = doc.data();
+                if (data.status === 'pending' || !data.status || data.status === 'active') {
+                    batch.update(doc.ref, { status: 'deleted' });
+                    canceledCount++;
+                }
+            });
+
+            if (canceledCount > 0) {
+                await batch.commit();
+            }
+            return canceledCount;
+        } catch (e) {
+            console.error('Admin Firestore cancelTasks error:', e.message || e);
+        }
+    }
+
+    // Fallback to REST
     const url = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/tasks`;
 
     try {
@@ -263,7 +343,7 @@ async function cancelTasksInFirestore(category, date) {
 
             const matchesDate = !date || docDate === date;
             const matchesCat = category === 'all' || docCat === category;
-            const isPending = docStatus === 'pending' || !docStatus;
+            const isPending = docStatus === 'pending' || !docStatus || docStatus === 'active';
 
             if (matchesDate && matchesCat && isPending) {
                 const docName = doc.name;
@@ -364,16 +444,23 @@ async function processPhotoDiagnosis(photoBuffer, mimeType = 'image/jpeg', userC
 export default async function handler(req, res) {
     if (req.method === 'GET') {
         return res.status(200).json({
-            status: 'active',
-            service: 'Kabun Farm 24/7 Telegram Webhook',
-            hasTelegramToken: !!TELEGRAM_TOKEN,
-            hasGeminiKey: !!GEMINI_API_KEY,
-            firestoreProject: FIRESTORE_PROJECT_ID
+            status: 'online',
+            service: 'Kabun Farm Intelligence'
         });
     }
 
     if (req.method !== 'POST') {
         return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    // 1. Webhook Secret Token Verification
+    const expectedSecret = process.env.TELEGRAM_WEBHOOK_SECRET;
+    if (expectedSecret) {
+        const incomingSecret = req.headers['x-telegram-bot-api-secret-token'];
+        if (incomingSecret !== expectedSecret) {
+            console.warn('Unauthorized webhook call — secret mismatch');
+            return res.status(403).json({ error: 'Forbidden' });
+        }
     }
 
     const update = req.body;
@@ -384,8 +471,27 @@ export default async function handler(req, res) {
     const msg = update.message;
     const chatId = msg.chat.id;
 
-    // 1. Handle /start command
+    // 2. Chat ID Authorization Check
+    const allowedChatIdsStr = process.env.ALLOWED_CHAT_IDS;
+    if (allowedChatIdsStr) {
+        const allowedChatIds = allowedChatIdsStr.split(',').map(s => s.trim()).filter(Boolean);
+        const isAllowed = allowedChatIds.includes(String(chatId));
+        if (!isAllowed) {
+            console.warn(`Unauthorized message attempt from Chat ID: ${chatId}`);
+            await sendTelegramMessage(chatId, `🔒 *Kabun Farm Security Notice*\n\nThis chat is not authorized to log farm data.\n\n📍 *Your Chat ID:* \`${chatId}\`\n\n_To authorize this chat, add \`${chatId}\` to \`ALLOWED_CHAT_IDS\` in your Vercel Environment Variables._`);
+            return res.status(200).send('OK');
+        }
+    }
+
+    // 3. Handle /id command (helps user discover their Chat ID anytime)
+    if (msg.text === '/id' || msg.text === '/myid') {
+        await sendTelegramMessage(chatId, `📍 *Your Telegram Chat ID:* \`${chatId}\`\n\nAdd this to \`ALLOWED_CHAT_IDS\` in your Vercel Environment Variables.`);
+        return res.status(200).send('OK');
+    }
+
+    // 4. Handle /start command
     if (msg.text === '/start') {
+        const idHint = allowedChatIdsStr ? '' : `\n\n📍 *Your Chat ID:* \`${chatId}\` _(Save this for your ALLOWED_CHAT_IDS whitelist)_`;
         await sendTelegramMessage(chatId, `🌱 *Welcome to Kabun Farm 24/7 Voice, Photo & Text Assistant!*
 
 You can send me:
@@ -396,6 +502,7 @@ You can send me:
 • 💧 *Irrigation* (e.g. _"Dah siram batas 1 dan 2"_)
 • 🚫 *Cancel Plan* (e.g. _"Batalkan plan racun hari ni"_)
 • 🗓️ *Schedule Task* (e.g. _"Plan spray KMB Bio Botava esok petang"_)
+• 🆔 *Check Chat ID:* Send \`/id\`${idHint}
 
 All logs sync directly to your Kabun Farm PWA! 🚀`);
         return res.status(200).send('OK');
@@ -501,22 +608,75 @@ ${diag.bedNumber ? `📍 *Location:* Bed ${diag.bedNumber}` : ''}`;
         return;
     }
 
+// Helper: Clean and normalize bed number / plot strings
+function normalizeBedScope(raw) {
+    if (!raw || raw === 'all' || raw === 'Whole Farm' || raw === 'null') return 'all';
+    const str = String(raw).trim();
+    if (!str || str.toLowerCase() === 'all' || str.toLowerCase() === 'whole farm') return 'all';
+
+    // Check if it's a plot or block
+    if (/^(plot|blok|block)\b/i.test(str)) {
+        return str;
+    }
+
+    // Check if it starts with "batas" or "bed" followed by numbers
+    const bedMatch = str.match(/^(?:batas|bed|no\.?|nombor)?\s*(\d+(?:\s*,\s*\d+)*)$/i);
+    if (bedMatch) {
+        return bedMatch[1].replace(/\s+/g, '');
+    }
+
+    // Check if contains digits like "batas 2"
+    const digitMatch = str.match(/(?:batas|bed|no\.?)\s*(\d+)/i);
+    if (digitMatch) {
+        return digitMatch[1];
+    }
+
+    const cleaned = str.replace(/^(?:batas|bed)\s*/i, '').trim();
+    return cleaned || 'all';
+}
+
+// Helper: Format Diagnosis Response & Handle Auto-Scheduling
+async function formatAndReplyDiagnosis(chatId, diag, messageId) {
+    const today = new Date().toISOString().slice(0, 10);
+    const tomorrow = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+    const cleanBed = normalizeBedScope(diag.bedNumber);
+
+    if (diag.isIncurable) {
+        const locText = cleanBed === 'all' ? '' : (/^(plot|blok|block)\b/i.test(cleanBed) ? `📍 *Location:* ${cleanBed}` : `📍 *Location:* Bed ${cleanBed}`);
+        const alertMsg = `🚨 *DIAGNOSIS: ${diag.issue.toUpperCase()}*
+━━━━━━━━━━━━━━━
+🌱 *Crop:* ${diag.crop || 'Plant'} | *Confidence:* ${diag.confidence || 'Medium'}
+⚠️ *Symptom:* ${diag.symptoms}
+
+🚫 *DO NOT SPRAY:*
+This is an incurable viral/vascular disease. Sprays cannot heal infected plants.
+
+🚨 *MANDATORY ACTION:*
+*Rogue (pull out & destroy)* this plant immediately to prevent spreading to neighboring beds!
+${locText}`;
+
+        await editTelegramMessage(chatId, messageId, alertMsg);
+        return;
+    }
+
     let scheduledText = '';
-    if (diag.autoSchedule && diag.bedNumber) {
+    if (diag.autoSchedule && cleanBed !== 'all') {
         const taskId = 'task_' + Date.now();
         const taskDoc = {
             id: taskId,
             date: tomorrow,
             activityCategory: 'pest_control',
-            bedScope: String(diag.bedNumber),
+            bedNumber: cleanBed,
+            bedScope: cleanBed,
             timeSlot: 'Evening',
             note: `${diag.issue}: ${diag.prescribedRemedy}`,
-            status: 'pending'
+            status: 'active'
         };
         await saveToFirestore('tasks', taskId, taskDoc);
-        scheduledText = `\n━━━━━━━━━━━━━━━\n🗓️ *Auto-Scheduled for Bed ${diag.bedNumber} tomorrow evening!*`;
+        const bedLabel = /^(plot|blok|block)\b/i.test(cleanBed) ? cleanBed : `Bed ${cleanBed}`;
+        scheduledText = `\n━━━━━━━━━━━━━━━\n🗓️ *Auto-Scheduled for ${bedLabel} tomorrow evening!*`;
     } else {
-        const scopeHint = diag.bedNumber ? `batas ${diag.bedNumber}` : `batas 1`;
+        const scopeHint = cleanBed !== 'all' ? (/^(plot|blok|block)\b/i.test(cleanBed) ? cleanBed : `batas ${cleanBed}`) : `batas 1`;
         scheduledText = `\n━━━━━━━━━━━━━━━\n💡 *Reply "Plan spray ${scopeHint} esok" to add to Planning tab.*`;
     }
 
@@ -570,11 +730,13 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
 
     } else if (record.type === 'activity') {
         const id = 'log_' + Date.now();
+        const cleanBed = normalizeBedScope(record.bedNumber);
         const activityDoc = {
             id,
             date,
             activityCategory: record.category || 'watering',
-            bedNumber: record.bedNumber ? String(record.bedNumber) : 'all',
+            bedNumber: cleanBed,
+            bedScope: cleanBed,
             cropName: record.cropName || '',
             inputsUsed: record.inputsUsed || '',
             costRM: record.costRM ? String(record.costRM) : '',
@@ -588,10 +750,11 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
         const icons = { watering: '💧', harvest: '🧺', pest_control: '🐛', sowing: '🌱' };
         const icon = icons[activityDoc.activityCategory] || '📝';
         const catLabel = activityDoc.activityCategory.toUpperCase().replace('_', ' ');
+        const scopeText = cleanBed === 'all' ? 'Whole Farm' : (/^(plot|blok|block)\b/i.test(cleanBed) ? cleanBed : `Bed ${cleanBed}`);
 
         const reply = `${icon} *${catLabel} RECORDED!*
 ━━━━━━━━━━━━━━━
-📍 *Scope:* ${activityDoc.bedNumber === 'all' ? 'Whole Farm' : 'Bed ' + activityDoc.bedNumber}
+📍 *Scope:* ${scopeText}
 ${activityDoc.cropName ? `🌱 *Crop:* ${activityDoc.cropName}\n` : ''}${activityDoc.weight ? `⚖️ *Harvested Weight:* ${activityDoc.weight} kg\n` : ''}${activityDoc.inputsUsed ? `🧪 *Inputs:* ${activityDoc.inputsUsed}\n` : ''}${activityDoc.costRM ? `💵 *Cost:* RM ${parseFloat(activityDoc.costRM).toFixed(2)}\n` : ''}📅 *Date:* ${date}
 ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
 
@@ -613,14 +776,16 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
 
     } else if (record.type === 'schedule_task') {
         const id = 'task_' + Date.now();
+        const cleanBed = normalizeBedScope(record.bedNumber);
         const taskDoc = {
             id,
             date,
             activityCategory: record.category || 'pest_control',
-            bedScope: record.bedNumber ? String(record.bedNumber) : 'all',
+            bedNumber: cleanBed,
+            bedScope: cleanBed,
             timeSlot: record.timeSlot || 'Morning',
             note: record.note || '',
-            status: 'pending'
+            status: 'active'
         };
 
         const ok = await saveToFirestore('tasks', id, taskDoc);
@@ -628,11 +793,12 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
         const icons = { watering: '💧', harvest: '🧺', pest_control: '🐛', sowing: '🌱' };
         const icon = icons[taskDoc.activityCategory] || '🗓️';
         const catLabel = taskDoc.activityCategory.toUpperCase().replace('_', ' ');
+        const scopeText = cleanBed === 'all' ? 'Whole Farm' : (/^(plot|blok|block)\b/i.test(cleanBed) ? cleanBed : `Bed ${cleanBed}`);
 
         const reply = `🗓️ *TASK SCHEDULED!*
 ━━━━━━━━━━━━━━━
 ${icon} *Category:* ${catLabel}
-📍 *Scope:* ${taskDoc.bedScope === 'all' ? 'Whole Farm' : 'Bed ' + taskDoc.bedScope}
+📍 *Scope:* ${scopeText}
 ⏰ *Time Slot:* ${taskDoc.timeSlot}
 ${taskDoc.note ? `📝 *Note:* ${taskDoc.note}\n` : ''}📅 *Date:* ${date}
 ${ok ? '✅ *Synced to Planning Tab!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
