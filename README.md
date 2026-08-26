@@ -49,9 +49,11 @@ An offline-first Progressive Web App (PWA) built specifically for managing and l
 - **Optimal Foliar Spray Advisory:** Agronomic weather analysis evaluating temperature and rain risk to recommend the safest spray window.
 - **Tactile Action "Juice":** GPU-accelerated micro-animations on logging (Water Ripple, Sprout Pop, Yield Bounce, Shield Shimmer).
 
-### 7. Weather Forecast & Coordinates
-- **Exact Coordinates:** Configured for farm coordinates `6°49'42.5"N, 116°45'56.8"E` (`6.828472, 116.765778`) in Kudat, Sabah (Timezone: `Asia/Kuching` / GMT+8).
-- **Open-Meteo Integration:** 4-day forecast for temperature, precipitation probability, and weather codes without requiring an API key.
+### 8. 24/7 Multilingual AI Telegram Bot & Pathology Vision
+- **Voice & Multilingual NLP Logging:** Speak or text in Bahasa Melayu, Manglish, Indonesian, or Chinese (e.g. _"Jual terung 25kg RM6 sekilo"_, _"Dah siram batas 1 dan 2"_) to instantly extract structured activity logs, harvest weights, sales records, and scheduled chores.
+- **Pathology Vision & Organic Treatment:** Send leaf/pest photos to trigger Gemini Vision analysis against the farm's 12 registered inventory products with FRAC/IRAC codes, application timings, and Pre-Harvest Interval (PHI) safety alerts.
+- **1-Tap Task Scheduling & Cancellation:** Schedule future sprays (_"Plan spray neem esok petang"_) or clear rain-delayed chores (_"Batalkan plan racun hari ni"_) directly from chat.
+- **Live Connection Diagnostics:** Built-in `/diag` command probes Firebase Admin SDK and Firestore connections directly from Telegram.
 
 ---
 
@@ -59,35 +61,57 @@ An offline-first Progressive Web App (PWA) built specifically for managing and l
 
 ```
 KabunFarm/
+├── api/
+│   ├── telegram.js     # 24/7 Vercel Serverless Webhook (Gemini AI + Firebase Admin SDK)
+│   └── set-webhook.js  # Protected webhook registration route (?key=SECRET)
+├── e2e/
+│   └── test_suite.spec.js # Playwright E2E & unit test browser runner
+├── scripts/
+│   ├── firebase-app-compat.js       # Bundled Firebase App SDK v10.14.0
+│   ├── firebase-auth-compat.js      # Bundled Firebase Auth SDK (Anonymous Auth)
+│   └── firebase-firestore-compat.js # Bundled Firebase Firestore SDK
 ├── index.html          # Main HTML structure with bottom sheet modals & momentum pulse
 ├── style.css           # Vanilla CSS (design system, tokens, GPU animations)
 ├── sw.js               # Cache-first Service Worker for offline PWA
-├── test.html           # Zero-dependency browser regression test suite
+├── test.html           # Zero-dependency browser regression test suite (101 tests)
 └── js/
     ├── state.js        # State store, date utilities, constants, color maps
     ├── calculations.js # Pure agricultural math (watering engine, growth stages, dilution, P&L)
-    ├── db.js           # Firestore SDK persistence, offline queues, CRUD operations
+    ├── resistance.js   # FRAC/IRAC mode of action rotations & PHI safety intervals
+    ├── db.js           # Firestore SDK persistence, Anonymous Auth handshake, offline sync
     ├── views.js        # DOM template renderers (cards, grid, chips, momentum)
     └── app.js          # Main app controller, modal flows, window bridge
 ```
 
 - **Runtime:** Pure Vanilla JS (Native ES Modules) + Vanilla CSS — **Zero build step, zero bundling dependencies**.
-- **Database:** Firebase Cloud Firestore with bundled local compat SDK (`scripts/firebase-*-compat.js`) for reliable offline initialization.
+- **Database:** Firebase Cloud Firestore with bundled local compat SDKs (`scripts/firebase-*-compat.js`) for reliable offline initialization.
+- **Backend Serverless:** Vercel Serverless Functions powered by `@google/generative-ai` and `firebase-admin`.
+- **Security Hardening:**
+  - **Database Firewall:** Firestore Security Rules locked to authenticated requests (`request.auth != null`).
+  - **Zero-Friction Client Auth:** PWA automatically negotiates Firebase Anonymous Authentication in the background.
+  - **Cryptographic Webhook Handshake:** Vercel `/api/telegram` validates Telegram's `X-Telegram-Bot-Api-Secret-Token` header.
+  - **Chat Authorization:** Strict `ALLOWED_CHAT_IDS` whitelist rejecting unauthorized senders.
 - **Offline Reliability:** Service Worker cache-first shell + IndexedDB/Firestore local cache.
-- **Security:** Farm-level PIN access control.
 
 ---
 
 ## 🧪 Testing & Verification
 
-Open `test.html` directly in any web browser — no local server or npm install required.
+Run the complete automated browser test suite locally:
+```bash
+npm test
+# or: npx playwright test
+```
 
-The regression suite contains **90 pure-function assertions** covering:
+You can also open `test.html` directly in any web browser without a build step.
+
+The regression suite contains **101 automated assertions** covering:
 - Date recovery from UTC ISO timestamps across month boundaries
 - 3-Way watering logic (whole-farm vs plot vs bed priority and multi-day gaps)
-- Fallow bed watering exclusion
-- Multi-ingredient recipe parsing and extreme sprayer tank scaling (up to 1000L IBC)
+- Fallow and empty-crop bed watering alert exclusions
+- Multi-ingredient recipe parsing, quick-formula overwriting, and sprayer tank scaling (up to 1000L IBC)
 - Crop P&L cost sharing, decimal rounding, and negative margin calculations
+- Scope resolution and bed identifier normalization (`batas 2`, `bed 1`, `Plot A`)
 - Sequential bed gap-finding (`findNextAvailableBedNumber`), custom bed IDs, and bed restoration
 - Biological crop growth stage classification (`calculateCropProgress`)
 - Daily farm momentum rollups (`calculateDailyMomentum`)
@@ -104,9 +128,13 @@ The regression suite contains **90 pure-function assertions** covering:
 - Numeric keypad optimization (`inputmode="decimal"`), sprayer tank steppers, bottom sheet modals, 2-column bed grid view, zero-accordion formula chips, 1-tap task execution, multi-bed batch logging.
 
 ### ✅ Tier 3: Operational Intelligence & Interactive Gamification (Done)
-- Biological crop growth progression bars, "Today's Farm Pulse" momentum scorecard, 1-tap grid quick-water, optimal foliar spray advisory, tactile action juice animations, and 90 automated unit tests.
+- Biological crop growth progression bars, "Today's Farm Pulse" momentum scorecard, 1-tap grid quick-water, optimal foliar spray advisory, tactile action juice animations.
+
+### ✅ Tier 4: Enterprise Security Hardening & 24/7 AI Assistant (Done)
+- Firestore database lockdown (`request.auth != null`), PWA Anonymous Auth, Firebase Admin SDK integration, Telegram webhook secret token verification, chat ID whitelisting, live `/diag` probe tool, and 101 automated Playwright regression tests.
 
 ---
 
 ## 📜 License
 Internal commercial farm management system — Kabun Farm, Kudat, Sabah.
+
