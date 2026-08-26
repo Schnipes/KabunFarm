@@ -11,38 +11,48 @@ const FIRESTORE_PROJECT_ID = 'kabunfarm';
 const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
 let adminDb = null;
+let lastAdminInitError = null;
+let lastFirestoreSaveError = null;
+
 function getAdminFirestore() {
     if (adminDb) return adminDb;
     try {
         if (!admin.apps || !admin.apps.length) {
-            if (process.env.FIREBASE_SERVICE_ACCOUNT) {
-                let serviceAccount;
-                try {
-                    serviceAccount = typeof process.env.FIREBASE_SERVICE_ACCOUNT === 'string'
-                        ? JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT)
-                        : process.env.FIREBASE_SERVICE_ACCOUNT;
-                } catch (pe) {
-                    console.error('Failed to parse FIREBASE_SERVICE_ACCOUNT JSON:', pe);
+            const rawSA = process.env.FIREBASE_SERVICE_ACCOUNT;
+            if (!rawSA) {
+                lastAdminInitError = 'FIREBASE_SERVICE_ACCOUNT env variable is missing in Vercel';
+                console.warn(lastAdminInitError);
+                return null;
+            }
+
+            let serviceAccount;
+            try {
+                serviceAccount = typeof rawSA === 'string' ? JSON.parse(rawSA.trim()) : rawSA;
+            } catch (pe) {
+                lastAdminInitError = 'JSON.parse error on FIREBASE_SERVICE_ACCOUNT: ' + pe.message;
+                console.error(lastAdminInitError);
+                return null;
+            }
+
+            if (serviceAccount && serviceAccount.private_key) {
+                if (typeof serviceAccount.private_key === 'string') {
+                    serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
                 }
-                if (serviceAccount) {
-                    if (serviceAccount.private_key && typeof serviceAccount.private_key === 'string') {
-                        serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, '\n');
-                    }
-                    admin.initializeApp({
-                        credential: admin.credential.cert(serviceAccount),
-                        projectId: FIRESTORE_PROJECT_ID
-                    });
-                } else {
-                    admin.initializeApp({ projectId: FIRESTORE_PROJECT_ID });
-                }
+                admin.initializeApp({
+                    credential: admin.credential.cert(serviceAccount),
+                    projectId: serviceAccount.project_id || FIRESTORE_PROJECT_ID
+                });
             } else {
-                admin.initializeApp({ projectId: FIRESTORE_PROJECT_ID });
+                lastAdminInitError = 'serviceAccount JSON missing private_key field';
+                console.error(lastAdminInitError);
+                return null;
             }
         }
         adminDb = admin.firestore();
         return adminDb;
     } catch (e) {
-        console.error('Firebase Admin init note:', e.message || e);
+        lastAdminInitError = 'admin.initializeApp error: ' + (e.message || String(e));
+        console.error('Firebase Admin init error:', e.message || e);
         return null;
     }
 }
@@ -265,8 +275,11 @@ async function saveToFirestore(collection, id, data) {
             await adminFirestore.collection(collection).doc(id).set(data);
             return true;
         } catch (e) {
+            lastFirestoreSaveError = e.message || String(e);
             console.error('Admin Firestore save failed, trying REST fallback:', e.message || e);
         }
+    } else {
+        lastFirestoreSaveError = lastAdminInitError || 'Admin SDK not initialized';
     }
 
     // Fallback to REST (when Service Account is not configured)
@@ -291,8 +304,12 @@ async function saveToFirestore(collection, id, data) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ fields })
         });
-        return res.ok;
+        if (res.ok) return true;
+        const errText = await res.text();
+        lastFirestoreSaveError = `REST write returned ${res.status}: ${errText.slice(0, 100)}`;
+        return false;
     } catch (e) {
+        lastFirestoreSaveError = `REST fetch failed: ${e.message}`;
         console.error('Firestore save error:', e);
         return false;
     }
@@ -500,7 +517,41 @@ export default async function handler(req, res) {
         return res.status(200).send('OK');
     }
 
-    // 4. Handle /start command
+    // 4. Handle /diag or /test command (probes Firestore connection live)
+    if (msg.text === '/diag' || msg.text === '/test' || msg.text === '/status') {
+        await sendChatAction(chatId, 'typing');
+        const hasEnv = !!process.env.FIREBASE_SERVICE_ACCOUNT;
+        let testResult = 'Testing connection...';
+        const adminFirestore = getAdminFirestore();
+
+        if (!adminFirestore) {
+            testResult = `❌ Admin SDK failed to initialize:\n_${lastAdminInitError || 'Unknown initialization error'}_`;
+        } else {
+            try {
+                const probeId = '_conn_probe_' + Date.now();
+                await adminFirestore.collection('config').doc(probeId).set({ probe: true, timestamp: Date.now() });
+                await adminFirestore.collection('config').doc(probeId).delete();
+                testResult = '✅ *Firestore Cloud Connection SUCCESSFUL!*\n_Service Account credentials are valid and active._';
+            } catch (te) {
+                testResult = `❌ *Firestore write test failed:*\n_${te.message}_`;
+            }
+        }
+
+        const report = `🔍 *Kabun Farm Bot Diagnostic Report*
+━━━━━━━━━━━━━━━
+🔑 *FIREBASE_SERVICE_ACCOUNT:* ${hasEnv ? '✅ Configured (' + process.env.FIREBASE_SERVICE_ACCOUNT.length + ' chars)' : '❌ Missing'}
+🛡️ *TELEGRAM_WEBHOOK_SECRET:* ${process.env.TELEGRAM_WEBHOOK_SECRET ? '✅ Configured' : '❌ Missing'}
+👥 *ALLOWED_CHAT_IDS:* \`${process.env.ALLOWED_CHAT_IDS || 'Not set'}\`
+📍 *Your Chat ID:* \`${chatId}\`
+
+📊 *Live Firestore Probe:*
+${testResult}`;
+
+        await sendTelegramMessage(chatId, report);
+        return res.status(200).send('OK');
+    }
+
+    // 5. Handle /start command
     if (msg.text === '/start') {
         const idHint = allowedChatIdsStr ? '' : `\n\n📍 *Your Chat ID:* \`${chatId}\` _(Save this for your ALLOWED_CHAT_IDS whitelist)_`;
         await sendTelegramMessage(chatId, `🌱 *Welcome to Kabun Farm 24/7 Voice, Photo & Text Assistant!*
@@ -513,7 +564,8 @@ You can send me:
 • 💧 *Irrigation* (e.g. _"Dah siram batas 1 dan 2"_)
 • 🚫 *Cancel Plan* (e.g. _"Batalkan plan racun hari ni"_)
 • 🗓️ *Schedule Task* (e.g. _"Plan spray KMB Bio Botava esok petang"_)
-• 🆔 *Check Chat ID:* Send \`/id\`${idHint}
+• 🆔 *Check Chat ID:* Send \`/id\`
+• 🔍 *Diagnostics:* Send \`/diag\`${idHint}
 
 All logs sync directly to your Kabun Farm PWA! 🚀`);
         return res.status(200).send('OK');
@@ -705,6 +757,9 @@ async function recordAndReply(chatId, record, messageId = null) {
         };
 
         const ok = await saveToFirestore('sales', id, saleDoc);
+        const syncMsg = ok 
+            ? '✅ *Synced to Kabun Farm PWA!*' 
+            : `⚠️ *Cloud sync failed*\n_${lastFirestoreSaveError || 'Authentication error'}_`;
 
         const reply = `💰 *SALE RECORDED!*
 ━━━━━━━━━━━━━━━
@@ -713,7 +768,7 @@ async function recordAndReply(chatId, record, messageId = null) {
 💵 *Price:* RM ${parseFloat(saleDoc.pricePerUnit).toFixed(2)}/${saleDoc.unit}
 📊 *Total Revenue:* *RM ${parseFloat(saleDoc.totalRevenue).toFixed(2)}*
 📅 *Date:* ${date}
-${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
+${syncMsg}`;
 
         await editTelegramMessage(chatId, messageId, reply);
 
@@ -735,6 +790,9 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
         };
 
         const ok = await saveToFirestore('logs', id, activityDoc);
+        const syncMsg = ok 
+            ? '✅ *Synced to Kabun Farm PWA!*' 
+            : `⚠️ *Cloud sync failed*\n_${lastFirestoreSaveError || 'Authentication error'}_`;
 
         const icons = { watering: '💧', harvest: '🧺', pest_control: '🐛', sowing: '🌱' };
         const icon = icons[activityDoc.activityCategory] || '📝';
@@ -745,7 +803,7 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
 ━━━━━━━━━━━━━━━
 📍 *Scope:* ${scopeText}
 ${activityDoc.cropName ? `🌱 *Crop:* ${activityDoc.cropName}\n` : ''}${activityDoc.weight ? `⚖️ *Harvested Weight:* ${activityDoc.weight} kg\n` : ''}${activityDoc.inputsUsed ? `🧪 *Inputs:* ${activityDoc.inputsUsed}\n` : ''}${activityDoc.costRM ? `💵 *Cost:* RM ${parseFloat(activityDoc.costRM).toFixed(2)}\n` : ''}📅 *Date:* ${date}
-${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
+${syncMsg}`;
 
         await editTelegramMessage(chatId, messageId, reply);
 
@@ -778,6 +836,9 @@ ${ok ? '✅ *Synced to Kabun Farm PWA!*' : '⚠️ *Saved locally, syncing to cl
         };
 
         const ok = await saveToFirestore('tasks', id, taskDoc);
+        const syncMsg = ok 
+            ? '✅ *Synced to Planning Tab!*' 
+            : `⚠️ *Cloud sync failed*\n_${lastFirestoreSaveError || 'Authentication error'}_`;
 
         const icons = { watering: '💧', harvest: '🧺', pest_control: '🐛', sowing: '🌱' };
         const icon = icons[taskDoc.activityCategory] || '🗓️';
@@ -790,7 +851,7 @@ ${icon} *Category:* ${catLabel}
 📍 *Scope:* ${scopeText}
 ⏰ *Time Slot:* ${taskDoc.timeSlot}
 ${taskDoc.note ? `📝 *Note:* ${taskDoc.note}\n` : ''}📅 *Date:* ${date}
-${ok ? '✅ *Synced to Planning Tab!*' : '⚠️ *Saved locally, syncing to cloud...*'}`;
+${syncMsg}`;
 
         await editTelegramMessage(chatId, messageId, reply);
     }
