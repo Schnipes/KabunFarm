@@ -216,9 +216,15 @@ async function sendChatAction(chatId, action = 'typing') {
     }
 }
 
-// Helper: Send message to Telegram chat (returns message_id)
+export let lastTelegramSendError = null;
+
+// Helper: Send message to Telegram chat with automatic Markdown-fallback
 export async function sendTelegramMessage(chatId, text) {
-    if (!TELEGRAM_TOKEN) return null;
+    if (!TELEGRAM_TOKEN) {
+        lastTelegramSendError = 'TELEGRAM_BOT_TOKEN is missing in environment variables';
+        console.error(lastTelegramSendError);
+        return null;
+    }
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     try {
         const res = await fetch(url, {
@@ -233,8 +239,31 @@ export async function sendTelegramMessage(chatId, text) {
         if (res.ok) {
             const data = await res.json();
             return data.result?.message_id || null;
+        } else {
+            const errText = await res.text();
+            lastTelegramSendError = `Markdown send failed (${res.status}): ${errText}`;
+            console.warn('sendTelegramMessage markdown failed, trying plain text fallback:', errText);
+
+            // Fallback: Strip formatting characters and send as plain text
+            const plainRes = await fetch(url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    chat_id: chatId,
+                    text: text.replace(/[*_`\[\]]/g, '')
+                })
+            });
+            if (plainRes.ok) {
+                const plainData = await plainRes.json();
+                return plainData.result?.message_id || null;
+            } else {
+                const plainErrText = await plainRes.text();
+                lastTelegramSendError = `Plain send failed (${plainRes.status}): ${plainErrText}`;
+                console.error('sendTelegramMessage plain text fallback failed:', plainErrText);
+            }
         }
     } catch (e) {
+        lastTelegramSendError = e.message || String(e);
         console.error('sendTelegramMessage error:', e);
     }
     return null;

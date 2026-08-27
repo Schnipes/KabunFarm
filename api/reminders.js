@@ -4,7 +4,7 @@
 // Triggered by Vercel Cron at 06:30 AM MYT (22:30 UTC)
 // ============================================================================
 
-import { generateDailyBriefing, sendTelegramMessage, cleanSecret } from './telegram.js';
+import { generateDailyBriefing, sendTelegramMessage, cleanSecret, lastTelegramSendError } from './telegram.js';
 
 export default async function handler(req, res) {
     const isVercelCron = Boolean(req.headers['x-vercel-cron']);
@@ -40,7 +40,12 @@ export default async function handler(req, res) {
 
         for (const chatId of chatIds) {
             const msgId = await sendTelegramMessage(chatId, briefingText);
-            results.push({ chatId, success: Boolean(msgId), messageId: msgId });
+            results.push({
+                chatId,
+                success: Boolean(msgId),
+                messageId: msgId,
+                error: msgId ? null : lastTelegramSendError
+            });
         }
 
         const successCount = results.filter(r => r.success).length;
