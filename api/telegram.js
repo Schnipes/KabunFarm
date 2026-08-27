@@ -385,7 +385,15 @@ _All clear. Enjoy your farm day! 🚜_
             list.forEach(t => {
                 const catIcon = icons[t.activityCategory] || '📝';
                 const catName = (t.activityCategory || 'task').toUpperCase().replace('_', ' ');
-                const scope = !t.bedNumber || t.bedNumber === 'all' ? 'Whole Farm' : (/^(plot|blok|block)\b/i.test(t.bedNumber) ? t.bedNumber : `Bed ${t.bedNumber}`);
+                const rawScope = String(t.bedNumber || t.bedScope || 'all').trim();
+                let scope = 'Whole Farm';
+                if (!rawScope || rawScope.toLowerCase() === 'all') {
+                    scope = 'Whole Farm';
+                } else if (/^(?:plot|blok|block)/i.test(rawScope)) {
+                    scope = rawScope.replace(/^(?:plot|blok|block)[_\s]*/i, 'Plot ').trim();
+                } else {
+                    scope = `Bed ${rawScope}`;
+                }
                 const doneMark = t.status === 'done' ? '✅ _(Done)_ ' : '⏳ ';
                 groupStr += `${doneMark}${catIcon} *${catName}* — ${scope}\n`;
                 if (t.note) groupStr += `   └ 📝 _${t.note}_\n`;
@@ -430,7 +438,15 @@ _Add tasks from the PWA Plan tab or reply "Plan spray batas 2 esok petang"!_`;
         dTasks.forEach(t => {
             const catIcon = icons[t.activityCategory] || '📝';
             const catName = (t.activityCategory || 'task').toUpperCase().replace('_', ' ');
-            const scope = !t.bedNumber || t.bedNumber === 'all' ? 'Whole Farm' : (/^(plot|blok|block)\b/i.test(t.bedNumber) ? t.bedNumber : `Bed ${t.bedNumber}`);
+            const rawScope = String(t.bedNumber || t.bedScope || 'all').trim();
+            let scope = 'Whole Farm';
+            if (!rawScope || rawScope.toLowerCase() === 'all') {
+                scope = 'Whole Farm';
+            } else if (/^(?:plot|blok|block)/i.test(rawScope)) {
+                scope = rawScope.replace(/^(?:plot|blok|block)[_\s]*/i, 'Plot ').trim();
+            } else {
+                scope = `Bed ${rawScope}`;
+            }
             const slot = t.timeSlot ? ` [${t.timeSlot}]` : '';
             const doneMark = t.status === 'done' ? '✅ ' : '• ';
             text += `${doneMark}${catIcon} *${catName}* — ${scope}${slot}\n`;
