@@ -217,7 +217,7 @@ async function sendChatAction(chatId, action = 'typing') {
 }
 
 // Helper: Send message to Telegram chat (returns message_id)
-async function sendTelegramMessage(chatId, text) {
+export async function sendTelegramMessage(chatId, text) {
     if (!TELEGRAM_TOKEN) return null;
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     try {
@@ -238,6 +238,179 @@ async function sendTelegramMessage(chatId, text) {
         console.error('sendTelegramMessage error:', e);
     }
     return null;
+}
+
+// Helper: Generate structured Daily / Multi-day task briefing with live weather
+export async function generateDailyBriefing(daysCount = 1) {
+    // Current time in Kudat, Sabah (UTC+8)
+    const sabahTime = new Date(Date.now() + 8 * 3600 * 1000);
+    const todayStr = sabahTime.toISOString().slice(0, 10);
+
+    // Weather Fetch (Open-Meteo for Kudat, Sabah)
+    let weatherSnippet = '';
+    try {
+        const weatherUrl = `https://api.open-meteo.com/v1/forecast?latitude=6.828472&longitude=116.765778&timezone=Asia%2FKuching&daily=precipitation_probability_max,temperature_2m_max,weather_code&forecast_days=3`;
+        const wRes = await fetch(weatherUrl);
+        if (wRes.ok) {
+            const wData = await wRes.json();
+            const daily = wData.daily;
+            if (daily && daily.time && daily.time.length) {
+                const todayRain = daily.precipitation_probability_max?.[0] ?? 0;
+                const todayTemp = daily.temperature_2m_max?.[0] ?? 31;
+
+                let rainIcon = '☀️';
+                let sprayAdvice = '✅ Safe spray window';
+                if (todayRain >= 60) {
+                    rainIcon = '🌧️';
+                    sprayAdvice = '⚠️ High rain risk — delay open foliar sprays';
+                } else if (todayRain >= 30) {
+                    rainIcon = '⛅';
+                    sprayAdvice = '🌤️ Moderate rain risk — check sky or spray early';
+                }
+
+                weatherSnippet = `\n🌦️ *Weather (Kudat, Sabah):* ${rainIcon} ${todayTemp}°C | Rain Risk: *${todayRain}%*\n💡 _${sprayAdvice}_\n`;
+            }
+        }
+    } catch (we) {
+        console.warn('Weather fetch note:', we.message);
+    }
+
+    // Query Firestore Tasks via Admin SDK
+    const adminFirestore = getAdminFirestore();
+    let tasks = [];
+    if (adminFirestore) {
+        try {
+            if (daysCount === 1) {
+                const snap = await adminFirestore.collection('tasks').where('date', '==', todayStr).get();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.status !== 'deleted') tasks.push(data);
+                });
+            } else {
+                const snap = await adminFirestore.collection('tasks').where('date', '>=', todayStr).get();
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    if (data.status !== 'deleted') tasks.push(data);
+                });
+            }
+        } catch (te) {
+            console.error('Fetch tasks error:', te);
+        }
+    }
+
+    // Fallback: Query REST if Admin SDK was null
+    if (!tasks.length && !adminFirestore) {
+        try {
+            const restUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/tasks`;
+            const rRes = await fetch(restUrl);
+            if (rRes.ok) {
+                const rData = await rRes.json();
+                (rData.documents || []).forEach(doc => {
+                    const f = doc.fields || {};
+                    const tDate = f.date?.stringValue;
+                    const tStatus = f.status?.stringValue;
+                    if (tDate === todayStr && tStatus !== 'deleted') {
+                        tasks.push({
+                            id: f.id?.stringValue,
+                            date: tDate,
+                            activityCategory: f.activityCategory?.stringValue || 'pest_control',
+                            bedNumber: f.bedNumber?.stringValue || f.bedScope?.stringValue || 'all',
+                            bedScope: f.bedScope?.stringValue || f.bedNumber?.stringValue || 'all',
+                            timeSlot: f.timeSlot?.stringValue || 'Morning',
+                            note: f.note?.stringValue || '',
+                            status: tStatus || 'active'
+                        });
+                    }
+                });
+            }
+        } catch (re) {}
+    }
+
+    const icons = { watering: '💧', harvest: '🧺', pest_control: '🐛', sowing: '🌱' };
+
+    // If 1 Day View (/today or morning reminder)
+    if (daysCount === 1) {
+        if (!tasks.length) {
+            return `🌱 *Kabun Farm Daily Briefing*
+📅 *Date:* ${todayStr} (Today)
+━━━━━━━━━━━━━━━${weatherSnippet}
+✅ *No scheduled tasks for today!*
+_All clear. Enjoy your farm day! 🚜_
+
+💡 *Reply "Plan spray batas 1 esok" to schedule tasks.*`;
+        }
+
+        // Group by Time Slot
+        const morningTasks = tasks.filter(t => t.timeSlot === 'Morning');
+        const eveningTasks = tasks.filter(t => t.timeSlot === 'Evening');
+        const anytimeTasks = tasks.filter(t => t.timeSlot !== 'Morning' && t.timeSlot !== 'Evening');
+
+        let text = `🌱 *Kabun Farm Daily Briefing*
+📅 *Date:* ${todayStr} (Today)
+━━━━━━━━━━━━━━━${weatherSnippet}
+📋 *${tasks.length} Scheduled Task(s):*\n`;
+
+        const formatGroup = (title, icon, list) => {
+            if (!list.length) return '';
+            let groupStr = `\n${icon} *${title}:*\n`;
+            list.forEach(t => {
+                const catIcon = icons[t.activityCategory] || '📝';
+                const catName = (t.activityCategory || 'task').toUpperCase().replace('_', ' ');
+                const scope = !t.bedNumber || t.bedNumber === 'all' ? 'Whole Farm' : (/^(plot|blok|block)\b/i.test(t.bedNumber) ? t.bedNumber : `Bed ${t.bedNumber}`);
+                const doneMark = t.status === 'done' ? '✅ _(Done)_ ' : '⏳ ';
+                groupStr += `${doneMark}${catIcon} *${catName}* — ${scope}\n`;
+                if (t.note) groupStr += `   └ 📝 _${t.note}_\n`;
+            });
+            return groupStr;
+        };
+
+        text += formatGroup('MORNING CHORES', '🌅', morningTasks);
+        text += formatGroup('EVENING SPRAYS & TASKS', '🌇', eveningTasks);
+        text += formatGroup('ANYTIME / GENERAL', '🕒', anytimeTasks);
+
+        text += `\n━━━━━━━━━━━━━━━\n💡 *Tip: Check tasks off in your Kabun Farm PWA or reply "Batalkan plan racun" to cancel.*`;
+        return text;
+    }
+
+    // If Multi-Day Plan View (/plan)
+    if (!tasks.length) {
+        return `🗓️ *Kabun Farm Upcoming Schedule*
+━━━━━━━━━━━━━━━${weatherSnippet}
+✅ *No upcoming tasks scheduled.*
+_Add tasks from the PWA Plan tab or reply "Plan spray batas 2 esok petang"!_`;
+    }
+
+    // Sort by date ascending
+    tasks.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+
+    // Group by Date
+    const byDate = {};
+    tasks.forEach(t => {
+        const d = t.date || todayStr;
+        if (!byDate[d]) byDate[d] = [];
+        byDate[d].push(t);
+    });
+
+    let text = `🗓️ *Kabun Farm Upcoming Schedule*
+━━━━━━━━━━━━━━━${weatherSnippet}`;
+
+    for (const [d, dTasks] of Object.entries(byDate)) {
+        const isToday = d === todayStr;
+        const dateHeader = isToday ? `📅 *${d} (TODAY)*` : `📅 *${d}*`;
+        text += `\n${dateHeader}\n`;
+        dTasks.forEach(t => {
+            const catIcon = icons[t.activityCategory] || '📝';
+            const catName = (t.activityCategory || 'task').toUpperCase().replace('_', ' ');
+            const scope = !t.bedNumber || t.bedNumber === 'all' ? 'Whole Farm' : (/^(plot|blok|block)\b/i.test(t.bedNumber) ? t.bedNumber : `Bed ${t.bedNumber}`);
+            const slot = t.timeSlot ? ` [${t.timeSlot}]` : '';
+            const doneMark = t.status === 'done' ? '✅ ' : '• ';
+            text += `${doneMark}${catIcon} *${catName}* — ${scope}${slot}\n`;
+            if (t.note) text += `   └ _${t.note}_\n`;
+        });
+    }
+
+    text += `\n━━━━━━━━━━━━━━━\n💡 *Reply with any log or spray update anytime!*`;
+    return text;
 }
 
 // Helper: Edit existing Telegram message in place
@@ -462,7 +635,7 @@ async function processPhotoDiagnosis(photoBuffer, mimeType = 'image/jpeg', userC
     throw lastError || new Error('All Vision model attempts failed');
 }
 
-function cleanSecret(s) {
+export function cleanSecret(s) {
     if (!s) return '';
     return String(s).trim().replace(/^["']|["']$/g, '');
 }
@@ -518,7 +691,22 @@ export default async function handler(req, res) {
         return res.status(200).send('OK');
     }
 
-    // 4. Handle /diag or /test command (probes Firestore connection live)
+    // 4. Handle /today and /plan commands (on-demand tasks & daily briefing)
+    if (msg.text === '/today' || msg.text === '/tasks' || msg.text === '/hariini') {
+        await sendChatAction(chatId, 'typing');
+        const briefing = await generateDailyBriefing(1);
+        await sendTelegramMessage(chatId, briefing);
+        return res.status(200).send('OK');
+    }
+
+    if (msg.text === '/plan' || msg.text === '/jadual' || msg.text === '/schedule') {
+        await sendChatAction(chatId, 'typing');
+        const planText = await generateDailyBriefing(3);
+        await sendTelegramMessage(chatId, planText);
+        return res.status(200).send('OK');
+    }
+
+    // 5. Handle /diag or /test command (probes Firestore connection live)
     if (msg.text === '/diag' || msg.text === '/test' || msg.text === '/status') {
         await sendChatAction(chatId, 'typing');
         const hasEnv = !!process.env.FIREBASE_SERVICE_ACCOUNT;
@@ -552,13 +740,15 @@ ${testResult}`;
         return res.status(200).send('OK');
     }
 
-    // 5. Handle /start command
+    // 6. Handle /start command
     if (msg.text === '/start') {
         const idHint = allowedChatIdsStr ? '' : `\n\n📍 *Your Chat ID:* \`${chatId}\` _(Save this for your ALLOWED_CHAT_IDS whitelist)_`;
         await sendTelegramMessage(chatId, `🌱 *Welcome to Kabun Farm 24/7 Voice, Photo & Text Assistant!*
 
 You can send me:
-• 📸 *Plant / Leaf Photos* for instant pest & disease diagnosis + organic recipes
+• 📋 *Today's Briefing:* Send \`/today\` for chores & weather
+• 🗓️ *Weekly Plan:* Send \`/plan\` for upcoming tasks
+• 📸 *Plant / Leaf Photos* for instant pest & disease diagnosis
 • 🎙️ *Voice Notes* in any language (Malay, English, Manglish, etc.)
 • 💬 *Text Messages* (e.g. _"Jual terung 25kg RM6 setengah sekilo"_)
 • 🧺 *Harvests* (e.g. _"Kutip bayam merah 10kg batas 2"_)

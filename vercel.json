@@ -1,4 +1,10 @@
 {
+  "crons": [
+    {
+      "path": "/api/reminders",
+      "schedule": "30 22 * * *"
+    }
+  ],
   "headers": [
     {
       "source": "/sw.js",
@@ -11,3 +17,4 @@
     }
   ]
 }
+
