@@ -304,11 +304,26 @@ export async function generateDailyBriefing(daysCount = 1) {
         console.warn('Weather fetch note:', we.message);
     }
 
-    // Query Firestore Tasks via Admin SDK
+    // Query Firestore Tasks and Plots via Admin SDK
     const adminFirestore = getAdminFirestore();
     let tasks = [];
+    const plotMap = {};
+
     if (adminFirestore) {
         try {
+            // Fetch plots for name resolution
+            const plotSnap = await adminFirestore.collection('plots').get();
+            plotSnap.forEach(doc => {
+                const p = doc.data();
+                const pName = p.name || p.title || '';
+                if (pName) {
+                    plotMap[doc.id] = pName;
+                    if (p.id) plotMap[p.id] = pName;
+                    const clean = doc.id.replace(/^plot_?/i, '');
+                    plotMap[clean] = pName;
+                }
+            });
+
             if (daysCount === 1) {
                 const snap = await adminFirestore.collection('tasks').where('date', '==', todayStr).get();
                 snap.forEach(doc => {
@@ -327,33 +342,25 @@ export async function generateDailyBriefing(daysCount = 1) {
         }
     }
 
-    // Fallback: Query REST if Admin SDK was null
-    if (!tasks.length && !adminFirestore) {
-        try {
-            const restUrl = `https://firestore.googleapis.com/v1/projects/${FIRESTORE_PROJECT_ID}/databases/(default)/documents/tasks`;
-            const rRes = await fetch(restUrl);
-            if (rRes.ok) {
-                const rData = await rRes.json();
-                (rData.documents || []).forEach(doc => {
-                    const f = doc.fields || {};
-                    const tDate = f.date?.stringValue;
-                    const tStatus = f.status?.stringValue;
-                    if (tDate === todayStr && tStatus !== 'deleted') {
-                        tasks.push({
-                            id: f.id?.stringValue,
-                            date: tDate,
-                            activityCategory: f.activityCategory?.stringValue || 'pest_control',
-                            bedNumber: f.bedNumber?.stringValue || f.bedScope?.stringValue || 'all',
-                            bedScope: f.bedScope?.stringValue || f.bedNumber?.stringValue || 'all',
-                            timeSlot: f.timeSlot?.stringValue || 'Morning',
-                            note: f.note?.stringValue || '',
-                            status: tStatus || 'active'
-                        });
-                    }
-                });
-            }
-        } catch (re) {}
-    }
+    // Helper: Resolve human-friendly scope name (Bed 1, Plot "Eggplant Plot", Whole Farm)
+    const resolveScopeName = (raw) => {
+        if (!raw || raw === 'all' || raw === 'Whole Farm') return 'Whole Farm';
+        const str = String(raw).trim();
+        if (!str || str.toLowerCase() === 'all') return 'Whole Farm';
+
+        // Check if matching plot in plotMap
+        if (plotMap[str]) return `Plot "${plotMap[str]}"`;
+        const cleanId = str.replace(/^plot_?/i, '');
+        if (plotMap[cleanId]) return `Plot "${plotMap[cleanId]}"`;
+
+        if (/^(?:plot|blok|block)/i.test(str)) {
+            const named = str.replace(/^(?:plot|blok|block)[_\s]*/i, 'Plot ').trim();
+            // If it's a raw timestamp ID like "Plot 1787328691648", just display "Plot"
+            if (/^Plot \d{10,}$/.test(named)) return 'Plot';
+            return named;
+        }
+        return `Bed ${str}`;
+    };
 
     const icons = { watering: '💧', harvest: '🧺', pest_control: '🐛', sowing: '🌱' };
 
@@ -385,15 +392,7 @@ _All clear. Enjoy your farm day! 🚜_
             list.forEach(t => {
                 const catIcon = icons[t.activityCategory] || '📝';
                 const catName = (t.activityCategory || 'task').toUpperCase().replace('_', ' ');
-                const rawScope = String(t.bedNumber || t.bedScope || 'all').trim();
-                let scope = 'Whole Farm';
-                if (!rawScope || rawScope.toLowerCase() === 'all') {
-                    scope = 'Whole Farm';
-                } else if (/^(?:plot|blok|block)/i.test(rawScope)) {
-                    scope = rawScope.replace(/^(?:plot|blok|block)[_\s]*/i, 'Plot ').trim();
-                } else {
-                    scope = `Bed ${rawScope}`;
-                }
+                const scope = resolveScopeName(t.bedNumber || t.bedScope);
                 const doneMark = t.status === 'done' ? '✅ _(Done)_ ' : '⏳ ';
                 groupStr += `${doneMark}${catIcon} *${catName}* — ${scope}\n`;
                 if (t.note) groupStr += `   └ 📝 _${t.note}_\n`;
@@ -438,15 +437,7 @@ _Add tasks from the PWA Plan tab or reply "Plan spray batas 2 esok petang"!_`;
         dTasks.forEach(t => {
             const catIcon = icons[t.activityCategory] || '📝';
             const catName = (t.activityCategory || 'task').toUpperCase().replace('_', ' ');
-            const rawScope = String(t.bedNumber || t.bedScope || 'all').trim();
-            let scope = 'Whole Farm';
-            if (!rawScope || rawScope.toLowerCase() === 'all') {
-                scope = 'Whole Farm';
-            } else if (/^(?:plot|blok|block)/i.test(rawScope)) {
-                scope = rawScope.replace(/^(?:plot|blok|block)[_\s]*/i, 'Plot ').trim();
-            } else {
-                scope = `Bed ${rawScope}`;
-            }
+            const scope = resolveScopeName(t.bedNumber || t.bedScope);
             const slot = t.timeSlot ? ` [${t.timeSlot}]` : '';
             const doneMark = t.status === 'done' ? '✅ ' : '• ';
             text += `${doneMark}${catIcon} *${catName}* — ${scope}${slot}\n`;
