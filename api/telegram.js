@@ -65,7 +65,7 @@ Your job is to parse voice messages or text sent by farmers and extract structur
 The farm stocks 16 registered inventory items (Foliar, Botanicals & Solid Fertilizers):
 1. KMB Bio Botava (2.5 ml/L, RM 94/1L = RM 0.094/ml, IRAC UNM - Botanical insect repellent)
 2. Neem Oil (5.0 ml/L + 2ml soap, RM 34/1L = RM 0.034/ml, IRAC UNM - Azadirachtin organic knockdown)
-3. KMB Pest Guard 2 (3.0 ml/L, RM 75/1L = RM 0.075/ml, IRAC UNM - Botanical contact deterrent)
+3. KMB Pest Guard 2 (Powder, 2.0 - 3.0 g/L, RM 75/500g = RM 0.15/g, IRAC UNM - Botanical contact deterrent)
 4. Wood Vinegar / Cuka Kayu (2.0 ml/L, RM 18/1L = RM 0.018/ml, FRAC M - Multi-site fungal suppressor)
 5. Antracol 70 WP (2.0 g/L, RM 45/1kg = RM 0.045/g, FRAC M02 - Propineb protectant, 7-day PHI)
 6. Wira CalBo (2.0 ml/L, RM 45/1L = RM 0.045/ml, Nutrition - Calcium + Boron fruit set booster)
@@ -178,7 +178,7 @@ Analyze the provided crop leaf or plant photo and any optional user caption.
 The farm stocks ONLY these 12 registered products:
 1. KMB Bio Botava (2.5 ml/L - IRAC UNM Botanical repellent)
 2. Neem Oil (5.0 ml/L + 2ml soap - IRAC UNM Azadirachtin organic knockdown)
-3. KMB Pest Guard 2 (3.0 ml/L - IRAC UNM Botanical contact deterrent)
+3. KMB Pest Guard 2 (Powder, 2.0 - 3.0 g/L - IRAC UNM Botanical contact deterrent)
 4. Wood Vinegar / Cuka Kayu (2.0 ml/L - FRAC M Fungal suppressor/repellent)
 5. Antracol 70 WP (2.0 g/L - FRAC M02 Propineb protectant, 7-day PHI)
 6. Wira CalBo (2.0 ml/L - Nutrition: Calcium + Boron)
@@ -1059,7 +1059,7 @@ ${syncMsg}`;
             const lowerInputs = record.inputsUsed.toLowerCase();
             if (lowerInputs.includes('bio botava')) computedCost = 3.76;
             else if (lowerInputs.includes('neem')) computedCost = 2.72;
-            else if (lowerInputs.includes('pest guard')) computedCost = 3.60;
+            else if (lowerInputs.includes('pest guard')) computedCost = 4.80;
             else if (lowerInputs.includes('amino')) computedCost = 1.12;
             else if (lowerInputs.includes('calbo')) computedCost = 1.44;
             else if (lowerInputs.includes('seaweed')) computedCost = 1.44;

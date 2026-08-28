@@ -89,7 +89,7 @@ export const DEFAULT_FORMULAS = [
         name: "Caterpillar & Borer Contact Spray",
         category: "Botanical",
         description: "Targeted contact deterrent for leaf-eating caterpillars, armyworms, flea beetles, and diamondback moths.",
-        recipe: "KMB Pest Guard 2:3:ml|Garlic Oil Extract:1.5:ml",
+        recipe: "KMB Pest Guard 2:3:g|Garlic Oil Extract:1.5:ml",
         status: "active"
     },
     {
@@ -118,7 +118,7 @@ export const DEFAULT_INVENTORY = [
     { id: "neem_oil", name: "Neem Oil", category: "foliar", packPrice: 34.00, packSize: 1000, unit: "ml", costPerUnit: 0.034 },
     { id: "wood_vinegar", name: "Wood Vinegar", category: "foliar", packPrice: 18.00, packSize: 1000, unit: "ml", costPerUnit: 0.018 },
     { id: "seaweed", name: "Seaweed Extract", category: "foliar", packPrice: 60.00, packSize: 1000, unit: "ml", costPerUnit: 0.060 },
-    { id: "pest_guard_2", name: "KMB Pest Guard 2", category: "foliar", packPrice: 75.00, packSize: 1000, unit: "ml", costPerUnit: 0.075 },
+    { id: "pest_guard_2", name: "KMB Pest Guard 2 (Powder)", category: "foliar", packPrice: 75.00, packSize: 500, unit: "g", costPerUnit: 0.150 },
     { id: "wira_calbo", name: "Wira CalBo", category: "foliar", packPrice: 45.00, packSize: 1000, unit: "ml", costPerUnit: 0.045 },
     { id: "antracol", name: "Antracol 70 WP", category: "foliar", packPrice: 45.00, packSize: 1000, unit: "g", costPerUnit: 0.045 },
     { id: "em4", name: "EM4", category: "foliar", packPrice: 25.00, packSize: 1000, unit: "ml", costPerUnit: 0.025 },
