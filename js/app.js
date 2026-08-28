@@ -38,6 +38,8 @@ import {
     parseRecipe,
     recalcAllDoses,
     calcSaleTotal,
+    calculateRecipeCost,
+    calculateFertilizerCost,
     exportActivityCsv
 } from "./calculations.js";
 
@@ -49,6 +51,11 @@ export {
     handleSyncBadgeClick,
     fetchBeds,
     fetchFormulas,
+    fetchInventory,
+    saveInventoryItem,
+    fetchExpenses,
+    saveExpense,
+    deleteExpense,
     fetchTasks,
     fetchPlots,
     fetchLogs,
@@ -73,6 +80,11 @@ import {
     handleSyncBadgeClick,
     fetchBeds,
     fetchFormulas,
+    fetchInventory,
+    saveInventoryItem,
+    fetchExpenses,
+    saveExpense,
+    deleteExpense,
     fetchTasks,
     fetchPlots,
     fetchLogs,
@@ -472,8 +484,26 @@ export function handleSubmit(event) {
 
     const firestore = getDb();
     const inputsUsed = document.getElementById("inputsUsed")?.value || "";
-    const costRM = document.getElementById("costRM")?.value || "";
+    let costRM = document.getElementById("costRM")?.value || "";
     const weight = activity === "harvest" ? (document.getElementById("harvestWeight")?.value || "") : "";
+
+    // Auto-compute cost if blank and inputs/formula were used
+    if (!costRM && inputsUsed) {
+        if (activity === "pest_control" && state.selectedQuickFormulaId) {
+            const f = (state.formulasData || []).find(form => form.id === state.selectedQuickFormulaId);
+            if (f && f.recipe) {
+                const totalFormulaCost = calculateRecipeCost(f.recipe, 16);
+                if (totalFormulaCost > 0) {
+                    costRM = (totalFormulaCost / Math.max(1, selectedBedNums.length)).toFixed(2);
+                }
+            }
+        } else {
+            const fertCost = calculateFertilizerCost(inputsUsed, 1);
+            if (fertCost > 0) {
+                costRM = (fertCost / Math.max(1, selectedBedNums.length)).toFixed(2);
+            }
+        }
+    }
 
     selectedBedNums.forEach((targetScope, idx) => {
         const entry = {
@@ -828,6 +858,96 @@ export function handleSaleSubmit(event) {
         renderFinancialSummary();
         renderCropPL();
     }
+}
+
+// --- 5B. Farm Overhead Expense Modal ---
+export function openExpenseModal() {
+    document.getElementById("expenseDate").value = todayString();
+    syncDatePresets("expenseDate");
+    document.getElementById("expenseCategory").value = "utilities";
+    document.getElementById("expenseAmount").value = "";
+    document.getElementById("expenseNote").value = "";
+    document.getElementById("expenseModalOverlay")?.classList.add("open");
+}
+
+export function closeExpenseModal() {
+    document.getElementById("expenseModalOverlay")?.classList.remove("open");
+}
+
+export function handleExpenseSubmit(e) {
+    e.preventDefault();
+    const date     = document.getElementById("expenseDate")?.value;
+    const category = document.getElementById("expenseCategory")?.value || "general";
+    const amount   = parseFloat(document.getElementById("expenseAmount")?.value) || 0;
+    const note     = document.getElementById("expenseNote")?.value?.trim() || "";
+
+    if (!date || amount <= 0) {
+        showToast("Please enter a valid date and amount.");
+        return;
+    }
+
+    const entry = {
+        id: "exp_" + Date.now(),
+        date,
+        category,
+        amount,
+        note,
+        status: "active"
+    };
+
+    saveExpense(entry);
+    closeExpenseModal();
+}
+
+export function deleteExpenseEntry(id) {
+    if (!id) return;
+    if (!confirm("Delete this expense record?")) return;
+    deleteExpense(id);
+}
+
+// --- 5C. Product Inventory Pricing Modal ---
+export function openEditPriceModal(itemId) {
+    const item = (state.inventoryData || []).find(i => i.id === itemId);
+    if (!item) return;
+    const idEl = document.getElementById("editPriceItemId");
+    const nameEl = document.getElementById("editPriceItemName");
+    const packPriceEl = document.getElementById("editPricePackPrice");
+    const packSizeEl = document.getElementById("editPricePackSize");
+    const unitEl = document.getElementById("editPriceUnitDisplay");
+
+    if (idEl) idEl.value = item.id;
+    if (nameEl) nameEl.textContent = item.name;
+    if (packPriceEl) packPriceEl.value = item.packPrice;
+    if (packSizeEl) packSizeEl.value = item.packSize;
+    if (unitEl) unitEl.textContent = item.unit;
+
+    document.getElementById("priceModalOverlay")?.classList.add("open");
+}
+
+export function closeEditPriceModal() {
+    document.getElementById("priceModalOverlay")?.classList.remove("open");
+}
+
+export function handlePriceSubmit(e) {
+    e.preventDefault();
+    const id = document.getElementById("editPriceItemId")?.value;
+    const packPrice = parseFloat(document.getElementById("editPricePackPrice")?.value) || 0;
+    const packSize  = parseFloat(document.getElementById("editPricePackSize")?.value) || 1;
+
+    if (!id || packPrice <= 0 || packSize <= 0) {
+        showToast("Please enter valid price and pack size.");
+        return;
+    }
+
+    const costPerUnit = packPrice / packSize;
+    const item = (state.inventoryData || []).find(i => i.id === id);
+    if (item) {
+        item.packPrice = packPrice;
+        item.packSize = packSize;
+        item.costPerUnit = costPerUnit;
+        saveInventoryItem(item);
+    }
+    closeEditPriceModal();
 }
 
 // --- 6. Task Modal & 1-Tap Execution ---
@@ -1642,11 +1762,20 @@ if (typeof window !== "undefined") {
         openBedFromPlot,
         deletePlot,
 
-        // Sales
+        // Sales & Expenses
         openSaleModal,
         closeSaleModal,
         handleSaleSubmit,
         calcSaleTotal,
+        openExpenseModal,
+        closeExpenseModal,
+        handleExpenseSubmit,
+        deleteExpenseEntry,
+
+        // Inventory & Pricing
+        openEditPriceModal,
+        closeEditPriceModal,
+        handlePriceSubmit,
 
         // Tasks
         openTaskModal,

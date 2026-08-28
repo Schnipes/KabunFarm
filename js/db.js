@@ -17,6 +17,7 @@ import {
     WEATHER_CACHE_KEY,
     WEATHER_URL,
     DEFAULT_FORMULAS,
+    DEFAULT_INVENTORY,
     ymd,
     todayString,
     saveBeds,
@@ -29,6 +30,9 @@ import {
     findNextAvailableBedNumber
 } from "./state.js";
 
+export const INVENTORY_CACHE_KEY = "farmlog_inventory_v1";
+export const EXPENSES_CACHE_KEY  = "farmlog_expenses_v1";
+
 import {
     renderBeds,
     populateBedDropdown,
@@ -37,6 +41,7 @@ import {
     refreshCropDatalists,
     renderWeather,
     renderFormulas,
+    renderInventoryPricing,
     renderPlanView,
     renderTodayTasks,
     renderCombinedActivity,
@@ -314,7 +319,129 @@ export async function fetchFormulas() {
         renderFormulas(formulas);
     } catch (e) {
         console.warn("fetchFormulas note:", e);
+    } finally {
+        fetchInventory();
     }
+}
+
+export async function fetchInventory() {
+    const cached = localStorage.getItem(INVENTORY_CACHE_KEY);
+    if (cached) {
+        try {
+            state.inventoryData = JSON.parse(cached);
+            renderInventoryPricing();
+        } catch (e) { /* ignore */ }
+    } else {
+        state.inventoryData = DEFAULT_INVENTORY;
+        renderInventoryPricing();
+    }
+    try {
+        const firestore = getDb();
+        if (!firestore) return;
+        const snap = await firestore.collection("inventory").get();
+        if (snap.empty) {
+            // Seed default inventory pricing
+            for (const item of DEFAULT_INVENTORY) {
+                await firestore.collection("inventory").doc(item.id).set(item);
+            }
+            state.inventoryData = DEFAULT_INVENTORY;
+            localStorage.setItem(INVENTORY_CACHE_KEY, JSON.stringify(DEFAULT_INVENTORY));
+            renderInventoryPricing();
+            return;
+        }
+        const items = snap.docs
+            .map(d => ({ ...d.data() }))
+            .filter(i => i.status !== "deleted");
+        
+        // Merge with defaults if any newly added default item is missing
+        const merged = [...items];
+        DEFAULT_INVENTORY.forEach(def => {
+            if (!merged.some(m => m.id === def.id)) merged.push(def);
+        });
+
+        state.inventoryData = merged;
+        localStorage.setItem(INVENTORY_CACHE_KEY, JSON.stringify(merged));
+        renderInventoryPricing();
+    } catch (e) {
+        console.warn("fetchInventory note:", e);
+    }
+}
+
+export async function saveInventoryItem(item) {
+    if (!item || !item.id) return;
+    const idx = (state.inventoryData || []).findIndex(i => i.id === item.id);
+    if (idx >= 0) {
+        state.inventoryData[idx] = { ...state.inventoryData[idx], ...item };
+    } else {
+        state.inventoryData.push(item);
+    }
+    localStorage.setItem(INVENTORY_CACHE_KEY, JSON.stringify(state.inventoryData));
+    renderInventoryPricing();
+
+    try {
+        const firestore = getDb();
+        if (firestore) {
+            await firestore.collection("inventory").doc(item.id).set(item, { merge: true });
+        }
+    } catch (e) {
+        console.error("saveInventoryItem failed:", e);
+    }
+    showToast(`Updated pricing for ${item.name || "item"}`);
+}
+
+export async function fetchExpenses() {
+    const cached = localStorage.getItem(EXPENSES_CACHE_KEY);
+    if (cached) {
+        try {
+            state.expensesData = JSON.parse(cached);
+        } catch (e) { /* ignore */ }
+    }
+    try {
+        const firestore = getDb();
+        if (!firestore) return;
+        const snap = await firestore.collection("expenses").orderBy("date", "desc").get();
+        const expenses = snap.docs.map(d => ({ ...d.data() })).filter(ex => ex.status !== "deleted");
+        state.expensesData = expenses;
+        localStorage.setItem(EXPENSES_CACHE_KEY, JSON.stringify(expenses));
+    } catch (e) {
+        console.warn("fetchExpenses note:", e);
+    }
+}
+
+export async function saveExpense(expense) {
+    if (!expense || !expense.id) return;
+    state.expensesData = [expense, ...(state.expensesData || [])];
+    localStorage.setItem(EXPENSES_CACHE_KEY, JSON.stringify(state.expensesData));
+    renderCombinedActivity();
+    renderFinancialSummary();
+
+    try {
+        const firestore = getDb();
+        if (firestore) {
+            await firestore.collection("expenses").doc(expense.id).set(expense);
+        }
+    } catch (e) {
+        console.error("saveExpense failed:", e);
+    }
+    showToast(`Recorded ${expense.category || "expense"}: RM ${(parseFloat(expense.amount) || 0).toFixed(2)}`);
+}
+
+export async function deleteExpense(expenseId) {
+    if (!expenseId) return;
+    state.expensesData = (state.expensesData || []).filter(e => String(e.id) !== String(expenseId));
+    localStorage.setItem(EXPENSES_CACHE_KEY, JSON.stringify(state.expensesData));
+    renderCombinedActivity();
+    renderFinancialSummary();
+
+    try {
+        const firestore = getDb();
+        if (firestore) {
+            await firestore.collection("expenses").doc(expenseId).update({ status: "deleted" });
+        }
+    } catch (e) {
+        console.error("deleteExpense failed:", e);
+    }
+    showToast("Expense removed");
 }
 
 export async function fetchTasks() {
@@ -381,14 +508,19 @@ export async function fetchLogs() {
     try {
         const firestore = getDb();
         if (!firestore) return;
-        const [logsSnap, salesSnap] = await Promise.all([
+        const [logsSnap, salesSnap, expensesSnap] = await Promise.all([
             firestore.collection("logs").orderBy("date", "desc").get(),
-            firestore.collection("sales").orderBy("date", "desc").get()
+            firestore.collection("sales").orderBy("date", "desc").get(),
+            firestore.collection("expenses").orderBy("date", "desc").get()
         ]);
-        const logs  = logsSnap.docs.map(d => ({ ...d.data() })).filter(l => l.status !== "deleted");
-        const sales = salesSnap.docs.map(d => ({ ...d.data() })).filter(s => s.status !== "deleted");
-        localStorage.setItem(LOGS_CACHE_KEY,  JSON.stringify(logs));
-        localStorage.setItem(SALES_CACHE_KEY, JSON.stringify(sales));
+        const logs     = logsSnap.docs.map(d => ({ ...d.data() })).filter(l => l.status !== "deleted");
+        const sales    = salesSnap.docs.map(d => ({ ...d.data() })).filter(s => s.status !== "deleted");
+        const expenses = expensesSnap.docs.map(d => ({ ...d.data() })).filter(e => e.status !== "deleted");
+        
+        state.expensesData = expenses;
+        localStorage.setItem(LOGS_CACHE_KEY,     JSON.stringify(logs));
+        localStorage.setItem(SALES_CACHE_KEY,    JSON.stringify(sales));
+        localStorage.setItem(EXPENSES_CACHE_KEY, JSON.stringify(expenses));
         renderCombinedActivity();
         renderFinancialSummary();
         renderCropPL();

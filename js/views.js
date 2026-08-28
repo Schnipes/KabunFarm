@@ -898,6 +898,59 @@ export function populateTaskFormulaList() {
     ).join("");
 }
 
+export const EXPENSE_ICONS = {
+    utilities: "⚡",
+    fuel: "⛽",
+    labor: "👷",
+    supplies: "🛠️",
+    maintenance: "🔧",
+    general: "💵"
+};
+
+export function renderInventoryPricing() {
+    const container = document.getElementById("inventoryList");
+    if (!container) return;
+    const inv = state.inventoryData && state.inventoryData.length ? state.inventoryData : [];
+    if (!inv.length) {
+        container.innerHTML = '<p style="color:#888;font-size:13px;padding:8px 0;">Loading inventory...</p>';
+        return;
+    }
+
+    const foliarItems = inv.filter(i => i.category !== "fertilizer");
+    const fertItems   = inv.filter(i => i.category === "fertilizer");
+
+    const renderCard = (item) => {
+        const costStr = parseFloat(item.costPerUnit) < 0.1 
+            ? `RM ${parseFloat(item.costPerUnit).toFixed(3)} / ${item.unit}` 
+            : `RM ${parseFloat(item.costPerUnit).toFixed(2)} / ${item.unit}`;
+        
+        return `
+        <div class="inventory-item-card">
+            <div class="inventory-item-info">
+                <p class="inventory-item-name">${escapeHtml(item.name)}</p>
+                <p class="inventory-item-meta">Pack: RM ${parseFloat(item.packPrice).toFixed(2)} (${item.packSize} ${item.unit}) · <span class="inventory-unit-rate">${costStr}</span></p>
+            </div>
+            <button type="button" class="inventory-edit-btn" onclick="openEditPriceModal('${escapeHtml(item.id)}')" aria-label="Edit Price">✏️ Edit</button>
+        </div>`;
+    };
+
+    let html = `
+    <div class="inventory-section-group">
+        <p class="inventory-group-title">🌿 Foliar Nutrition &amp; Bio Protectants (${foliarItems.length})</p>
+        <div class="inventory-cards-grid">
+            ${foliarItems.map(renderCard).join("")}
+        </div>
+    </div>
+    <div class="inventory-section-group" style="margin-top:20px;">
+        <p class="inventory-group-title">🌾 Granular &amp; Soil Fertilizers (${fertItems.length})</p>
+        <div class="inventory-cards-grid">
+            ${fertItems.map(renderCard).join("")}
+        </div>
+    </div>`;
+
+    container.innerHTML = html;
+}
+
 // --- 7. Activity Log & Financials ---
 export function renderBedFilterChips() {
     const container = document.getElementById("bedFilterChips");
@@ -921,7 +974,8 @@ export function renderTypeFilterChips() {
         { label: "🐛 Pest control", value: "pest_control" },
         { label: "🧺 Harvest",      value: "harvest" },
         { label: "🌱 Sowing",       value: "sowing" },
-        { label: "💰 Sales",        value: "sale" }
+        { label: "💰 Sales",        value: "sale" },
+        { label: "💡 Expenses",     value: "expense" }
     ];
     container.innerHTML = types.map(t =>
         `<button class="bed-filter-chip${state.activeTypeFilter === t.value ? " active" : ""}" onclick="filterByType('${t.value}')">${t.label}</button>`
@@ -956,8 +1010,10 @@ export function updateClearFiltersBtn() {
 
 export function renderCombinedActivity() {
     updateClearFiltersBtn();
-    const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
-    const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
+    const logs     = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)     || "[]");
+    const sales    = JSON.parse(localStorage.getItem(SALES_CACHE_KEY)    || "[]");
+    const expenses = JSON.parse(localStorage.getItem("farmlog_expenses_v1") || "[]");
+
     const saleEntries = sales.map(s => ({
         id:               s.id,
         date:             s.date,
@@ -969,7 +1025,19 @@ export function renderCombinedActivity() {
         pricePerUnit:     s.pricePerUnit,
         totalRevenue:     s.totalRevenue
     }));
-    renderLogs([...logs, ...saleEntries]);
+
+    const expenseEntries = expenses.map(e => ({
+        id:               e.id,
+        date:             e.date,
+        activityCategory: "expense",
+        expenseCategory:  e.category || "general",
+        bedNumber:        null,
+        amount:           e.amount,
+        note:             e.note || "",
+        costRM:           e.amount
+    }));
+
+    renderLogs([...logs, ...saleEntries, ...expenseEntries]);
 }
 
 export function renderLogs(logs) {
@@ -1010,10 +1078,13 @@ export function renderLogs(logs) {
         .sort((a, b) => b.localeCompare(a))
         .map(dateKey => {
             const cards = [...groups[dateKey]].reverse().map(log => {
-                const icon       = CATEGORY_ICON[log.activityCategory]  || "📝";
-                const label      = CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory);
+                const isSale    = log.activityCategory === "sale";
+                const isExpense = log.activityCategory === "expense";
+                const icon       = isExpense ? (EXPENSE_ICONS[log.expenseCategory] || "💵") : (CATEGORY_ICON[log.activityCategory] || "📝");
+                const label      = isExpense 
+                    ? `Overhead: ${(log.expenseCategory || "general").toUpperCase()}`
+                    : (CATEGORY_LABEL[log.activityCategory] || escapeHtml(log.activityCategory));
                 const scopeLabel = escapeHtml(resolveLogScopeLabel(log));
-                const isSale = log.activityCategory === "sale";
 
                 let body = "";
                 if (isSale) {
@@ -1023,6 +1094,12 @@ export function renderLogs(logs) {
                         <span class="sale-log-qty">${escapeHtml(String(log.quantity))} ${escapeHtml(log.unit)}</span>
                         <span class="sale-log-price">RM ${parseFloat(log.pricePerUnit).toFixed(2)}/${escapeHtml(log.unit)}</span>
                         <span class="sale-log-total">RM ${parseFloat(log.totalRevenue).toFixed(2)}</span>
+                    </div>`;
+                } else if (isExpense) {
+                    body = `
+                    <div class="sale-log-detail">
+                        <span class="sale-log-crop">${log.note ? escapeHtml(log.note) : "Farm Operational Overhead"}</span>
+                        <span class="sale-log-total" style="color:var(--color-danger, #e53e3e);">-RM ${parseFloat(log.amount).toFixed(2)}</span>
                     </div>`;
                 } else {
                     const cropLine   = log.cropName   ? `<p class="log-inputs">🌱 ${escapeHtml(log.cropName)}</p>`  : "";
@@ -1036,14 +1113,18 @@ export function renderLogs(logs) {
                     body = cropLine + weightLine + inputLine + financials;
                 }
 
+                const deleteFn = isExpense 
+                    ? `deleteExpenseEntry('${escapeHtml(String(log.id))}')`
+                    : `deleteLogEntry('${escapeHtml(String(log.id))}')`;
+
                 return `
-                <div class="log-card${isSale ? " log-card-sale" : ""}">
-                    <button class="log-delete-btn" onclick="deleteLogEntry('${escapeHtml(String(log.id))}')" aria-label="Delete log">✕</button>
+                <div class="log-card${isSale ? " log-card-sale" : ""}${isExpense ? " log-card-expense" : ""}">
+                    <button class="log-delete-btn" onclick="${deleteFn}" aria-label="Delete entry">✕</button>
                     <div class="log-header">
                         <span class="log-icon">${icon}</span>
                         <div class="log-meta">
                             <p class="log-title">${label}</p>
-                            ${!isSale ? `<p class="log-date"><span class="tag">${scopeLabel}</span></p>` : ""}
+                            ${(!isSale && !isExpense) ? `<p class="log-date"><span class="tag">${scopeLabel}</span></p>` : ""}
                         </div>
                     </div>
                     ${body}
@@ -1056,8 +1137,9 @@ export function renderLogs(logs) {
 }
 
 export function renderFinancialSummary() {
-    const logs  = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)  || "[]");
-    const sales = JSON.parse(localStorage.getItem(SALES_CACHE_KEY) || "[]");
+    const logs     = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY)     || "[]");
+    const sales    = JSON.parse(localStorage.getItem(SALES_CACHE_KEY)    || "[]");
+    const expenses = JSON.parse(localStorage.getItem("farmlog_expenses_v1") || "[]");
 
     const now = new Date();
     let cutoffStr = "";
@@ -1073,8 +1155,9 @@ export function renderFinancialSummary() {
         cutoffStr = ymd(d.toISOString());
     }
 
-    let revenue = 0;
-    let cost    = 0;
+    let revenue      = 0;
+    let directCost   = 0;
+    let overheadCost = 0;
 
     sales.forEach(s => {
         if (s.status !== "deleted" && ymd(s.date) >= cutoffStr) {
@@ -1084,19 +1167,26 @@ export function renderFinancialSummary() {
 
     logs.forEach(l => {
         if (l.status !== "deleted" && ymd(l.date) >= cutoffStr) {
-            cost    += parseFloat(l.costRM)    || 0;
-            revenue += parseFloat(l.revenueRM) || 0;
+            directCost += parseFloat(l.costRM)    || 0;
+            revenue    += parseFloat(l.revenueRM) || 0;
         }
     });
 
-    const net = revenue - cost;
+    expenses.forEach(e => {
+        if (e.status !== "deleted" && ymd(e.date) >= cutoffStr) {
+            overheadCost += parseFloat(e.amount) || 0;
+        }
+    });
+
+    const totalCost = directCost + overheadCost;
+    const net = revenue - totalCost;
 
     const revEl  = document.getElementById("finRevenue");
     const costEl = document.getElementById("finCost");
     const netEl  = document.getElementById("finNet");
 
     if (revEl)  revEl.textContent  = "RM " + revenue.toFixed(2);
-    if (costEl) costEl.textContent = "RM " + cost.toFixed(2);
+    if (costEl) costEl.textContent = "RM " + totalCost.toFixed(2);
     if (netEl) {
         netEl.textContent = (net >= 0 ? "+RM " : "-RM ") + Math.abs(net).toFixed(2);
         netEl.className = "fin-value " + (net >= 0 ? "green" : "red");

@@ -60,29 +60,33 @@ function getAdminFirestore() {
 
 const SYSTEM_PROMPT = `
 You are the AI Farm Intelligence Assistant for Kabun Farm.
-Your job is to parse voice messages or text sent by farmers and extract structured farm activity logs, sales records, or planning commands.
+Your job is to parse voice messages or text sent by farmers and extract structured farm activity logs, sales records, overhead expenses, or planning commands.
 
-The farm stocks 12 specific registered inventory products:
-1. KMB Bio Botava (2.5 ml/L, IRAC UNM - Botanical insect repellent)
-2. Neem Oil (5.0 ml/L + 2ml soap, IRAC UNM - Azadirachtin organic knockdown)
-3. KMB Pest Guard 2 (3.0 ml/L, IRAC UNM - Botanical contact deterrent for caterpillars/thrips)
-4. Wood Vinegar / Cuka Kayu (2.0 ml/L, FRAC M - Multi-site fungal suppressor/repellent)
-5. Antracol 70 WP (2.0 g/L, FRAC M02 - Propineb multi-site protectant, 7-day PHI)
-6. Wira CalBo (2.0 ml/L, Nutrition - Calcium + Boron blossom end rot/fruit set)
-7. KMB Amino 18 (2.0 ml/L, Nutrition - 18 L-Amino acids vegetative booster)
-8. Garlic Oil Extract (1.5 - 2.0 ml/L, IRAC UNM - Botanical aromatic deterrent)
-9. EM4 (5.0 - 10.0 ml/L, Biological Inoculant - Beneficial microbes)
-10. Seaweed Extract (1.0 - 1.5 ml/L, Biostimulant - Kelp root & stress tolerance)
-11. Abamectin (0.5 - 1.0 ml/L, IRAC Group 6 - Mites/leafminers knockdown, 7-day PHI, max 2 consecutive sprays)
-12. Cypermethrin (1.0 - 1.5 ml/L, IRAC Group 3A - Caterpillars/beetles knockdown, 7-day PHI, max 2 consecutive sprays)
+The farm stocks 16 registered inventory items (Foliar, Botanicals & Solid Fertilizers):
+1. KMB Bio Botava (2.5 ml/L, RM 94/1L = RM 0.094/ml, IRAC UNM - Botanical insect repellent)
+2. Neem Oil (5.0 ml/L + 2ml soap, RM 34/1L = RM 0.034/ml, IRAC UNM - Azadirachtin organic knockdown)
+3. KMB Pest Guard 2 (3.0 ml/L, RM 75/1L = RM 0.075/ml, IRAC UNM - Botanical contact deterrent)
+4. Wood Vinegar / Cuka Kayu (2.0 ml/L, RM 18/1L = RM 0.018/ml, FRAC M - Multi-site fungal suppressor)
+5. Antracol 70 WP (2.0 g/L, RM 45/1kg = RM 0.045/g, FRAC M02 - Propineb protectant, 7-day PHI)
+6. Wira CalBo (2.0 ml/L, RM 45/1L = RM 0.045/ml, Nutrition - Calcium + Boron fruit set booster)
+7. KMB Amino 18 (2.0 ml/L, RM 35/1L = RM 0.035/ml, Nutrition - 18 L-Amino acids vegetative recovery)
+8. Garlic Oil Extract (1.5 - 2.0 ml/L, RM 35/1L = RM 0.035/ml, IRAC UNM - Botanical aromatic deterrent)
+9. EM4 (5.0 - 10.0 ml/L, RM 25/1L = RM 0.025/ml, Biological Inoculant - Beneficial microbes)
+10. Seaweed Extract (1.0 - 1.5 ml/L, RM 60/1L = RM 0.060/ml, Biostimulant - Kelp cytokinins)
+11. Abamectin (0.5 - 1.0 ml/L, RM 38/1L = RM 0.038/ml, IRAC Group 6 - Mites/leafminers knockdown, 7-day PHI)
+12. Cypermethrin (1.0 - 1.5 ml/L, RM 35/1L = RM 0.035/ml, IRAC Group 3A - Caterpillars knockdown, 7-day PHI)
+13. RealStrong NPK 11-11-11 (RM 115/25kg = RM 4.60/kg - Bio-chemical base & balanced growth)
+14. RealStrong NPK 8-8-29 (RM 140/25kg = RM 5.60/kg - High Potassium fruiting finisher)
+15. Bluvita NPK 16-16-16 (RM 185/50kg = RM 3.70/kg - High Nitrogen vegetative booster)
+16. Dolomite / Kapur Pertanian (RM 20/25kg = RM 0.80/kg - Soil pH buffer & Calcium/Magnesium)
 
 Users may speak or type in:
-- Bahasa Melayu (Standard or Colloquial: "Dah kutip terung batas 2 dapat 15 kilo", "Jual terung 30kg RM5/kg", "Batas 3 dah siram air", "Batalkan plan racun hari ni", "Plan spray neem esok petang")
-- Manglish / English ("Harvested 20kg red amaranth bed 4", "Sold 10kg chili RM8 per kg", "Cancel watering plan for today", "Plan spray KMB Bio Botava for tomorrow evening")
-- Indonesian ("Sudah petik terong 12 kilo bed 1", "Batal jadwal siram hari ini")
-- Chinese ("今天二号床采收了15公斤茄子", "取消今天的打药计划")
+- Bahasa Melayu (Standard or Colloquial: "Dah kutip terung batas 2 dapat 15 kilo", "Jual terung 30kg RM5/kg", "Batas 3 dah siram air", "Tabur Bluvita 16-16-16 1kg batas 2", "Bayar bil elektrik RM145", "Beli diesel pam air RM50", "Batalkan plan racun hari ni", "Plan spray neem esok petang")
+- Manglish / English ("Harvested 20kg red amaranth bed 4", "Sold 10kg chili RM8 per kg", "Applied 2kg RealStrong 8-8-29 on bed 1", "Paid SESB electricity bill RM150", "Cancel watering plan for today")
+- Indonesian ("Sudah petik terong 12 kilo bed 1", "Beli solar RM60")
+- Chinese ("今天二号床采收了15公斤茄子", "支付电费145马币")
 
-Extract the intent and return ONLY a valid JSON object matching one of these 4 schemas:
+Extract the intent and return ONLY a valid JSON object matching one of these 5 schemas:
 
 SCHEMA 1: SALE LOG
 {
@@ -103,12 +107,22 @@ SCHEMA 2: FARM ACTIVITY LOG (COMPLETED work: harvest, watering, pest_control, so
   "bedNumber": "1", // or "all", or "plot_xxx" if specified
   "cropName": "Canonical English Crop Name",
   "weight": 15.0, // only for harvest in kg
-  "inputsUsed": "e.g. KMB Bio Botava, Neem Oil, Antracol, etc.",
-  "costRM": 0.00, // optional cost
+  "inputsUsed": "e.g. KMB Bio Botava, Neem Oil, Bluvita 16-16-16, RealStrong 8-8-29, etc.",
+  "costRM": 0.00, // optional cost in RM
   "date": "YYYY-MM-DD"
 }
 
-SCHEMA 3: CANCEL / DELETE PLANNED TASK
+SCHEMA 3: FARM OVERHEAD EXPENSE (Bills, Fuel, Labor, Supplies, Maintenance)
+(Trigger words: "bayar bil", "bil elektrik", "electricity bill", "beli diesel", "solar", "petrol", "upah pekerja", "gaji", "wages", "beli paip", "fitting", "repair", "racun", "baja")
+{
+  "type": "expense",
+  "category": "utilities" | "fuel" | "labor" | "supplies" | "maintenance" | "general",
+  "amount": 145.00,
+  "note": "Description (e.g. SESB Electricity bill, 20L Diesel for pump, Worker wages)",
+  "date": "YYYY-MM-DD"
+}
+
+SCHEMA 4: CANCEL / DELETE PLANNED TASK
 (Trigger words: "cancel plan", "batalkan plan", "batal jadual", "delete task", "tak jadi spray", "cancel watering")
 {
   "type": "cancel_task",
@@ -116,14 +130,14 @@ SCHEMA 3: CANCEL / DELETE PLANNED TASK
   "date": "YYYY-MM-DD"
 }
 
-SCHEMA 4: SCHEDULE / ADD PLANNED TASK
+SCHEMA 5: SCHEDULE / ADD PLANNED TASK
 (Trigger words: "plan spray for tomorrow", "jadualkan siram", "schedule harvest", "set task")
 {
   "type": "schedule_task",
   "category": "pest_control" | "watering" | "harvest" | "sowing",
   "bedNumber": "1", // or "all"
   "timeSlot": "Morning" | "Evening" | "Anytime",
-  "note": "Description of task or recipe using the 12 inventory products",
+  "note": "Description of task or recipe using the 16 inventory products",
   "date": "YYYY-MM-DD"
 }
 
@@ -999,9 +1013,63 @@ ${syncMsg}`;
 
         await editTelegramMessage(chatId, messageId, reply);
 
+    } else if (record.type === 'expense') {
+        const id = 'exp_' + Date.now();
+        const expDoc = {
+            id,
+            date,
+            category: record.category || 'general',
+            amount: parseFloat(record.amount || 0),
+            note: record.note || '',
+            status: 'active'
+        };
+
+        const ok = await saveToFirestore('expenses', id, expDoc);
+        const syncMsg = ok 
+            ? '✅ *Synced to Kabun Farm PWA!*' 
+            : `⚠️ *Cloud sync failed*\n_${lastFirestoreSaveError || 'Authentication error'}_`;
+
+        const expIcons = {
+            utilities: '⚡',
+            fuel: '⛽',
+            labor: '👷',
+            supplies: '🛠️',
+            maintenance: '🔧',
+            general: '💵'
+        };
+        const icon = expIcons[expDoc.category] || '💵';
+        const catLabel = (expDoc.category || 'general').toUpperCase();
+
+        const reply = `${icon} *FARM EXPENSE RECORDED!*
+━━━━━━━━━━━━━━━
+📂 *Category:* ${catLabel}
+💵 *Amount:* *RM ${parseFloat(expDoc.amount).toFixed(2)}*
+${expDoc.note ? `📝 *Details:* ${expDoc.note}\n` : ''}📅 *Date:* ${date}
+${syncMsg}`;
+
+        await editTelegramMessage(chatId, messageId, reply);
+
     } else if (record.type === 'activity') {
         const id = 'log_' + Date.now();
         const cleanBed = normalizeBedScope(record.bedNumber);
+
+        // Auto-compute cost if not explicitly supplied
+        let computedCost = record.costRM ? parseFloat(record.costRM) : 0;
+        if (!computedCost && record.inputsUsed) {
+            const lowerInputs = record.inputsUsed.toLowerCase();
+            if (lowerInputs.includes('bio botava')) computedCost = 3.76;
+            else if (lowerInputs.includes('neem')) computedCost = 2.72;
+            else if (lowerInputs.includes('pest guard')) computedCost = 3.60;
+            else if (lowerInputs.includes('amino')) computedCost = 1.12;
+            else if (lowerInputs.includes('calbo')) computedCost = 1.44;
+            else if (lowerInputs.includes('seaweed')) computedCost = 1.44;
+            else if (lowerInputs.includes('antracol')) computedCost = 1.44;
+            else if (lowerInputs.includes('11-11-11') || lowerInputs.includes('11 11 11')) computedCost = 4.60;
+            else if (lowerInputs.includes('8-8-29') || lowerInputs.includes('8 8 29')) computedCost = 5.60;
+            else if (lowerInputs.includes('16-16-16') || lowerInputs.includes('16 16 16') || lowerInputs.includes('bluvita')) computedCost = 3.70;
+            else if (lowerInputs.includes('dolomite') || lowerInputs.includes('kapur')) computedCost = 0.80;
+        }
+
         const activityDoc = {
             id,
             date,
@@ -1010,7 +1078,7 @@ ${syncMsg}`;
             bedScope: cleanBed,
             cropName: record.cropName || '',
             inputsUsed: record.inputsUsed || '',
-            costRM: record.costRM ? String(record.costRM) : '',
+            costRM: computedCost > 0 ? String(computedCost.toFixed(2)) : '',
             revenueRM: '',
             weight: record.weight ? String(record.weight) : '',
             status: 'active'

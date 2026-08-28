@@ -110,12 +110,36 @@ export const DEFAULT_FORMULAS = [
     }
 ];
 
+export const DEFAULT_INVENTORY = [
+    // Foliar & Botanical Bio Protectants (User Exact Pricing)
+    { id: "bio_botava", name: "KMB Bio Botava", category: "foliar", packPrice: 94.00, packSize: 1000, unit: "ml", costPerUnit: 0.094 },
+    { id: "amino_18", name: "KMB Amino 18", category: "foliar", packPrice: 35.00, packSize: 1000, unit: "ml", costPerUnit: 0.035 },
+    { id: "garlic_oil", name: "Garlic Oil Extract", category: "foliar", packPrice: 35.00, packSize: 1000, unit: "ml", costPerUnit: 0.035 },
+    { id: "neem_oil", name: "Neem Oil", category: "foliar", packPrice: 34.00, packSize: 1000, unit: "ml", costPerUnit: 0.034 },
+    { id: "wood_vinegar", name: "Wood Vinegar", category: "foliar", packPrice: 18.00, packSize: 1000, unit: "ml", costPerUnit: 0.018 },
+    { id: "seaweed", name: "Seaweed Extract", category: "foliar", packPrice: 60.00, packSize: 1000, unit: "ml", costPerUnit: 0.060 },
+    { id: "pest_guard_2", name: "KMB Pest Guard 2", category: "foliar", packPrice: 75.00, packSize: 1000, unit: "ml", costPerUnit: 0.075 },
+    { id: "wira_calbo", name: "Wira CalBo", category: "foliar", packPrice: 45.00, packSize: 1000, unit: "ml", costPerUnit: 0.045 },
+    { id: "antracol", name: "Antracol 70 WP", category: "foliar", packPrice: 45.00, packSize: 1000, unit: "g", costPerUnit: 0.045 },
+    { id: "em4", name: "EM4", category: "foliar", packPrice: 25.00, packSize: 1000, unit: "ml", costPerUnit: 0.025 },
+    { id: "abamectin", name: "Abamectin", category: "foliar", packPrice: 38.00, packSize: 1000, unit: "ml", costPerUnit: 0.038 },
+    { id: "cypermethrin", name: "Cypermethrin", category: "foliar", packPrice: 35.00, packSize: 1000, unit: "ml", costPerUnit: 0.035 },
+
+    // Granular & Soil Fertilizers
+    { id: "npk_11_11_11", name: "RealStrong NPK 11-11-11", category: "fertilizer", packPrice: 115.00, packSize: 25, unit: "kg", costPerUnit: 4.60 },
+    { id: "npk_8_8_29", name: "RealStrong NPK 8-8-29", category: "fertilizer", packPrice: 140.00, packSize: 25, unit: "kg", costPerUnit: 5.60 },
+    { id: "bluvita_16_16_16", name: "Bluvita NPK 16-16-16", category: "fertilizer", packPrice: 185.00, packSize: 50, unit: "kg", costPerUnit: 3.70 },
+    { id: "dolomite", name: "Dolomite (Kapur Pertanian)", category: "fertilizer", packPrice: 20.00, packSize: 25, unit: "kg", costPerUnit: 0.80 }
+];
+
 // --- Mutable Runtime State Store ---
 export const state = {
     bedsData: [],
     formulasData: [],
     tasksData: [],
     plotsData: [],
+    inventoryData: [],
+    expensesData: [],
     selectedTaskFormulaId: null,
     selectedQuickFormulaId: null,
     maxBedNumber: (typeof localStorage !== "undefined" ? parseInt(localStorage.getItem(BED_MAX_KEY), 10) : 0) || 0,

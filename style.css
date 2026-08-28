@@ -2701,3 +2701,68 @@ textarea.invalid {
 .activity-pill-btn .pill-label {
   font-size: 13.5px;
 }
+
+/* ---------- Inventory & Pricing Section ---------- */
+.inventory-section-group {
+  margin-bottom: 16px;
+}
+.inventory-group-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text-dim);
+  margin-bottom: 8px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.inventory-cards-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.inventory-item-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+}
+.inventory-item-info {
+  flex: 1;
+  min-width: 0;
+}
+.inventory-item-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--color-text);
+  margin: 0 0 2px 0;
+}
+.inventory-item-meta {
+  font-size: 12px;
+  color: var(--color-text-dim);
+  margin: 0;
+}
+.inventory-unit-rate {
+  color: var(--color-primary);
+  font-weight: 700;
+}
+.inventory-edit-btn {
+  background: transparent;
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--color-text);
+  cursor: pointer;
+  margin-left: 10px;
+}
+.inventory-edit-btn:hover {
+  background: var(--color-bg);
+}
+
+/* Expense Log Card */
+.log-card-expense {
+  border-left: 4px solid var(--color-warning, #d97706);
+}

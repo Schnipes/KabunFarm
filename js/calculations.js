@@ -112,6 +112,37 @@ export function renderIngredients(ingredients, liters) {
     }).join('');
 }
 
+export function calculateRecipeCost(recipeStr, volumeLiters = 16, inventoryList = state.inventoryData) {
+    const ingredients = parseRecipe(recipeStr);
+    if (!ingredients || !ingredients.length) return 0;
+    const inv = inventoryList && inventoryList.length ? inventoryList : [];
+    let totalCost = 0;
+
+    ingredients.forEach(ing => {
+        const item = inv.find(p => p.name?.toLowerCase() === ing.name?.toLowerCase() || p.id === ing.name?.toLowerCase().replace(/\s+/g, '_'));
+        const unitCost = item ? (parseFloat(item.costPerUnit) || 0) : 0;
+        const totalUnits = ing.amount * (parseFloat(volumeLiters) || 16);
+        totalCost += totalUnits * unitCost;
+    });
+
+    return totalCost;
+}
+
+export function calculateFertilizerCost(productNameOrId, quantityAmount = 1, inventoryList = state.inventoryData) {
+    if (!productNameOrId) return 0;
+    const inv = inventoryList && inventoryList.length ? inventoryList : [];
+    const query = String(productNameOrId).toLowerCase().trim();
+    const item = inv.find(p => 
+        p.id === query ||
+        p.name?.toLowerCase() === query ||
+        p.name?.toLowerCase().includes(query) ||
+        query.includes(p.id)
+    );
+    if (!item) return 0;
+    const unitCost = parseFloat(item.costPerUnit) || 0;
+    return (parseFloat(quantityAmount) || 0) * unitCost;
+}
+
 export function recalcAllDoses(liters) {
     state.formulasData.forEach((f, i) => {
         const ingredients = parseRecipe(f.recipe);

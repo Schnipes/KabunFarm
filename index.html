@@ -118,6 +118,13 @@
         <div id="formulaList">
           <p style="color:#888;font-size:14px;padding:8px 4px;">Loading formulas...</p>
         </div>
+
+        <div class="section-header" style="margin-top:28px;">
+          <p class="section-label">Inventory &amp; Pricing</p>
+        </div>
+        <div id="inventoryList">
+          <p style="color:#888;font-size:14px;padding:8px 4px;">Loading inventory...</p>
+        </div>
       </section>
     </div>
 
@@ -126,8 +133,11 @@
       <section aria-label="Activity log">
         <div class="section-header">
           <p class="section-label">Activity</p>
-          <button class="add-bed-btn" id="clearFiltersBtn" onclick="clearActivityFilters()" hidden>✕ Clear filters</button>
-          <button class="add-bed-btn" onclick="exportActivityCsv()">⬇ Export CSV</button>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;">
+            <button class="add-bed-btn" onclick="openExpenseModal()">+ Add Expense</button>
+            <button class="add-bed-btn" id="clearFiltersBtn" onclick="clearActivityFilters()" hidden>✕ Clear filters</button>
+            <button class="add-bed-btn" onclick="exportActivityCsv()">⬇ Export CSV</button>
+          </div>
         </div>
 
         <!-- Financial Summary -->
@@ -660,21 +670,82 @@
     </div>
   </div>
 
-  <!-- Archived Beds Modal -->
-  <div class="modal-overlay" id="archivedBedsModalOverlay">
+  <!-- Expense Modal -->
+  <div class="modal-overlay" id="expenseModalOverlay">
     <div class="modal-sheet">
       <div class="bottom-sheet-handle" aria-hidden="true"></div>
       <div class="modal-header">
-        <h2>Archived Beds</h2>
-        <button class="modal-close" onclick="closeArchivedBedsModal()" aria-label="Close">✕</button>
+        <h2>Add Farm Expense</h2>
+        <button class="modal-close" onclick="closeExpenseModal()" aria-label="Close">✕</button>
       </div>
-      <p style="font-size:12.5px;color:var(--color-text-dim);margin:0 0 12px 0;">Retired beds are hidden from the active farm view. Restoring a bed brings it back to the home grid.</p>
-      <div id="archivedBedsList"></div>
+      <form id="expenseForm" onsubmit="handleExpenseSubmit(event)" novalidate>
+        <div class="form-field">
+          <div class="field-label-row">
+            <label for="expenseDate">Date</label>
+            <div class="date-preset-pills" id="expenseDatePills">
+              <button type="button" class="date-pill-btn active" onclick="setDatePreset('expenseDate', 0, this)">Today</button>
+              <button type="button" class="date-pill-btn" onclick="setDatePreset('expenseDate', 1, this)">Yesterday</button>
+            </div>
+          </div>
+          <input type="date" id="expenseDate" required onchange="syncDatePresets('expenseDate')">
+        </div>
+
+        <div class="form-field">
+          <label for="expenseCategory">Expense Category</label>
+          <select id="expenseCategory">
+            <option value="utilities">⚡ Utilities (SESB Electricity / Water)</option>
+            <option value="fuel">⛽ Fuel &amp; Diesel (Pump / Generator)</option>
+            <option value="labor">👷 Labor &amp; Wages</option>
+            <option value="supplies">🛠️ Supplies (Pipes, Poly, Mulch)</option>
+            <option value="maintenance">🔧 Machinery &amp; Repairs</option>
+            <option value="general">💵 General Operational</option>
+          </select>
+        </div>
+
+        <div class="form-field">
+          <label for="expenseAmount">Amount (RM)</label>
+          <input type="number" id="expenseAmount" placeholder="0.00" inputmode="decimal" min="0.01" step="0.01" required>
+        </div>
+
+        <div class="form-field">
+          <label for="expenseNote">Description / Details <span style="font-size:11px;color:#888;">optional</span></label>
+          <input type="text" id="expenseNote" placeholder="e.g. SESB Bill July, 20L Diesel for pump">
+        </div>
+
+        <button type="submit" class="submit-btn">Save Expense</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Price Editing Modal -->
+  <div class="modal-overlay" id="priceModalOverlay">
+    <div class="modal-sheet">
+      <div class="bottom-sheet-handle" aria-hidden="true"></div>
+      <div class="modal-header">
+        <h2>Edit Product Price</h2>
+        <button class="modal-close" onclick="closeEditPriceModal()" aria-label="Close">✕</button>
+      </div>
+      <form id="priceForm" onsubmit="handlePriceSubmit(event)" novalidate>
+        <input type="hidden" id="editPriceItemId">
+        <p style="font-size:15px;font-weight:700;color:var(--color-primary);margin:0 0 14px 0;" id="editPriceItemName"></p>
+
+        <div class="form-field">
+          <label for="editPricePackPrice">Package / Bag Price (RM)</label>
+          <input type="number" id="editPricePackPrice" placeholder="0.00" inputmode="decimal" min="0.01" step="0.01" required>
+        </div>
+
+        <div class="form-field">
+          <label for="editPricePackSize">Package Size (<span id="editPriceUnitDisplay">unit</span>)</label>
+          <input type="number" id="editPricePackSize" placeholder="1" inputmode="decimal" min="0.01" step="any" required>
+        </div>
+
+        <button type="submit" class="submit-btn">Update Price</button>
+      </form>
     </div>
   </div>
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="js/app.js?v=20260826a"></script>
+  <script type="module" src="js/app.js?v=20260828a"></script>
 </body>
 </html>
