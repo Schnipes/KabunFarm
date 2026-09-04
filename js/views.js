@@ -169,7 +169,7 @@ export function renderEmptyBedCard(bed) {
     return `
     <div class="batch-card bed-card-empty bed-card-clickable" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
         <div class="bed-card-header">
-            <p class="batch-title" style="color:#888;">Bed ${safeBedNum}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
+            <p class="batch-title" style="color:var(--color-text-dim);">Bed ${safeBedNum}${bed.name ? ` <span class="bed-custom-name">· ${escapeHtml(bed.name)}</span>` : ""}</p>
             <span class="bed-chevron">›</span>
         </div>
         <p class="bed-empty-label">Ready to sow</p>
@@ -327,7 +327,7 @@ export function renderBedGrid(beds) {
     const gridContainer = document.getElementById("bedGridList");
     if (!gridContainer) return;
     if (!beds.length) {
-        gridContainer.innerHTML = '<p style="color:#888;font-size:13px;padding:8px 4px;">No beds created yet.</p>';
+        gridContainer.innerHTML = '<p style="color:var(--color-text-dim);font-size:13px;padding:8px 4px;">No beds created yet.</p>';
         return;
     }
 
@@ -395,7 +395,7 @@ export function renderBeds(beds) {
                 </div>
             </div>`;
         }
-        if (gridContainer) gridContainer.innerHTML = '<p style="color:#888;font-size:13px;padding:8px 4px;">No beds created yet.</p>';
+        if (gridContainer) gridContainer.innerHTML = '<p style="color:var(--color-text-dim);font-size:13px;padding:8px 4px;">No beds created yet.</p>';
         return;
     }
 
@@ -436,7 +436,7 @@ export function renderArchivedBedsModal() {
     if (!list) return;
     const archived = state.archivedBedsData || [];
     if (!archived.length) {
-        list.innerHTML = '<p style="color:#888;font-size:14px;padding:16px 0;text-align:center;">No archived beds.</p>';
+        list.innerHTML = '<p style="color:var(--color-text-dim);font-size:14px;padding:16px 0;text-align:center;">No archived beds.</p>';
         return;
     }
     list.innerHTML = archived.map(b => {
@@ -542,7 +542,7 @@ export function renderFormulas(formulas) {
     const container = document.getElementById("formulaList");
     if (!container) return;
     if (!formulas.length) {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No formulas yet.</p>';
+        container.innerHTML = '<p style="color:var(--color-text-dim);font-size:14px;padding:8px 4px;">No formulas yet.</p>';
         return;
     }
     const vol = parseFloat(document.getElementById("globalSprayerVol")?.value) || 16;
@@ -594,7 +594,7 @@ export function renderQuickFormulaChips() {
     const container = document.getElementById("quickFormulaChips");
     if (!container) return;
     if (!state.formulasData.length) {
-        container.innerHTML = '<span style="color:#888;font-size:12px;">No formulas available</span>';
+        container.innerHTML = '<span style="color:var(--color-text-dim);font-size:12px;">No formulas available</span>';
         return;
     }
     container.innerHTML = state.formulasData.map(f => {
@@ -887,7 +887,7 @@ export function populateTaskFormulaList() {
     const container = document.getElementById("taskFormulaList");
     if (!container) return;
     if (!state.formulasData.length) {
-        container.innerHTML = '<p style="color:#888;font-size:13px;padding:6px 0;">No formulas yet.</p>';
+        container.innerHTML = '<p style="color:var(--color-text-dim);font-size:13px;padding:6px 0;">No formulas yet.</p>';
         return;
     }
     container.innerHTML = state.formulasData.map(f => `
@@ -912,7 +912,7 @@ export function renderInventoryPricing() {
     if (!container) return;
     const inv = state.inventoryData && state.inventoryData.length ? state.inventoryData : [];
     if (!inv.length) {
-        container.innerHTML = '<p style="color:#888;font-size:13px;padding:8px 0;">Loading inventory...</p>';
+        container.innerHTML = '<p style="color:var(--color-text-dim);font-size:13px;padding:8px 0;">Loading inventory...</p>';
         return;
     }
 
@@ -1063,7 +1063,7 @@ export function renderLogs(logs) {
     }
 
     if (!filtered.length) {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No activity logged yet.</p>';
+        container.innerHTML = '<p style="color:var(--color-text-dim);font-size:14px;padding:8px 4px;">No activity logged yet.</p>';
         return;
     }
 
@@ -1199,7 +1199,7 @@ export function renderCropPL() {
 
     const data = computeCropPL();
     if (!data.length) {
-        container.innerHTML = '<p style="color:#888;font-size:14px;padding:8px 4px;">No crop data yet — log a sale or harvest to see profit by crop.</p>';
+        container.innerHTML = '<p style="color:var(--color-text-dim);font-size:14px;padding:8px 4px;">No crop data yet — log a sale or harvest to see profit by crop.</p>';
         return;
     }
 

@@ -1,7 +1,8 @@
 :root {
   --color-text: #111111;
   --color-text-secondary: #374151;
-  --color-text-dim: #4b5563;
+  --color-text-dim: #4b5563; /* 7.0:1 contrast on white (WCAG AAA) */
+  --color-text-muted: #595959; /* 4.6:1 contrast on white (WCAG AA) */
   --color-bg: #ffffff;
   --color-primary: #1a8f3c;
   --color-primary-dark: #146b2d;
@@ -13,8 +14,24 @@
   --color-accent-harvest: #a3690b;
   --color-accent-crop: #1a8f3c;
   --color-accent-sale: #7b4fb5;
+  --font-xs: 11.5px;
+  --font-sm: 13.5px;
+  --font-base: 15px;
+  --font-md: 16px;
+  --font-lg: 18px;
+  --font-xl: 20px;
+  --font-2xl: 24px;
+  --font-3xl: 28px;
+  --space-2xs: 2px;
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-base: 16px;
+  --space-lg: 20px;
+  --space-xl: 24px;
+  --space-2xl: 32px;
   --radius: 12px;
-  --tap-min: 56px;
+  --tap-min: 44px;
   --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
 }
 
@@ -162,11 +179,11 @@ section {
 }
 
 .section-label {
-  font-size: 13px;
+  font-size: var(--font-sm);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #555555;
+  color: var(--color-text-muted);
   margin: 0 0 10px 4px;
 }
 
@@ -293,8 +310,8 @@ section {
 .category-swatch.none-swatch {
   background: var(--color-surface);
   border: 2px dashed var(--color-border);
-  color: #888;
-  font-size: 11px;
+  color: var(--color-text-dim);
+  font-size: var(--font-xs);
 }
 
 .category-swatch.none-swatch.selected {
@@ -445,10 +462,10 @@ section {
   border: 1.5px solid var(--color-border);
   color: var(--color-text);
   border-radius: 8px;
-  width: 40px;
-  height: 40px;
-  min-width: 40px;
-  min-height: 40px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  min-height: 44px;
   font-size: 18px;
   font-weight: 700;
   display: flex;
@@ -517,15 +534,15 @@ section {
   background: var(--color-surface);
   border: 1.5px solid var(--color-border);
   border-radius: 999px;
-  padding: 4px 12px;
-  font-size: 12px;
+  padding: 6px 14px;
+  font-size: var(--font-sm);
   font-weight: 700;
   color: var(--color-text-secondary);
   cursor: pointer;
   line-height: 1.2;
   transition: all 0.15s ease;
   font-family: var(--font);
-  min-height: 32px;
+  min-height: var(--tap-min);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -708,7 +725,7 @@ textarea {
 
 .bed-chevron {
   font-size: 22px;
-  color: #888;
+  color: var(--color-text-dim);
   line-height: 1;
 }
 
@@ -857,7 +874,7 @@ textarea {
   flex: 1;
   display: flex; flex-direction: column; align-items: center; gap: 2px;
 }
-.weather-day-col .d-label { font-size: 10.5px; font-weight: 700; color: #888; text-transform: uppercase; letter-spacing: 0.03em; }
+.weather-day-col .d-label { font-size: var(--font-xs); font-weight: 700; color: var(--color-text-dim); text-transform: uppercase; letter-spacing: 0.03em; }
 .weather-day-col .d-icon { font-size: 17px; margin: 1px 0; }
 .weather-day-col .d-pct { font-size: 11px; color: var(--color-accent-water); font-weight: 600; font-variant-numeric: tabular-nums; }
 .weather-hint {
@@ -870,7 +887,7 @@ textarea {
   display: block;
   margin-top: 8px;
   font-size: 11px;
-  color: #888;
+  color: var(--color-text-dim);
 }
 
 /* ---------- Pull-to-refresh ---------- */
@@ -882,7 +899,7 @@ textarea {
   align-items: center;
   justify-content: center;
   font-size: 13px;
-  color: #888;
+  color: var(--color-text-dim);
   transition: height 0.15s ease, opacity 0.15s ease;
   pointer-events: none;
 }
@@ -941,8 +958,8 @@ textarea {
 
 .bed-custom-name {
   font-weight: 400;
-  color: #888;
-  font-size: 14px;
+  color: var(--color-text-dim);
+  font-size: var(--font-sm);
 }
 
 .bed-delete-btn {
@@ -1154,8 +1171,8 @@ textarea {
 }
 
 .formula-desc {
-  font-size: 13px;
-  color: #555;
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
   margin: 0 0 10px;
 }
 
@@ -1211,9 +1228,9 @@ textarea {
 }
 
 .formula-calc-label {
-  font-size: 13px;
+  font-size: var(--font-sm);
   font-weight: 700;
-  color: #555;
+  color: var(--color-text-muted);
 }
 
 .formula-volume-wrap {
@@ -1237,7 +1254,7 @@ textarea {
 .formula-volume-unit {
   font-size: 14px;
   font-weight: 700;
-  color: #555;
+  color: var(--color-text-muted);
 }
 
 .formula-ingredients {
@@ -1305,8 +1322,8 @@ textarea {
 }
 
 .log-date {
-  font-size: 13px;
-  color: #555555;
+  font-size: var(--font-sm);
+  color: var(--color-text-muted);
   margin: 0;
   display: flex;
   align-items: center;
@@ -1382,8 +1399,8 @@ textarea {
 }
 
 .formula-pick-cat {
-  font-size: 11px;
-  color: #888;
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
   text-align: right;
   flex-shrink: 0;
 }
@@ -1400,19 +1417,23 @@ textarea {
 /* ---------- Pill choice (time slot picker) ---------- */
 .pill-row {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
 }
 .pill-choice {
-  font-size: 12px;
+  font-size: var(--font-sm);
   font-weight: 600;
-  padding: 7px 12px;
+  padding: 8px 14px;
   border-radius: 999px;
   border: 2px solid var(--color-border);
   background: var(--color-bg);
-  color: #555;
+  color: var(--color-text-muted);
   cursor: pointer;
   font-family: inherit;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .pill-choice.selected {
   border-color: var(--color-primary);
@@ -1756,8 +1777,8 @@ textarea {
   border: 1px solid var(--color-border);
   border-radius: var(--radius);
   padding: 12px 16px;
-  font-size: 15px;
-  color: #555;
+  font-size: var(--font-base);
+  color: var(--color-text-muted);
   margin-bottom: 8px;
   text-align: right;
 }
@@ -1859,8 +1880,8 @@ textarea {
 }
 
 .empty-beds-hint {
-  font-size: 13px;
-  color: #888;
+  font-size: var(--font-sm);
+  color: var(--color-text-dim);
   margin: 0;
 }
 
@@ -1928,13 +1949,17 @@ textarea {
 .bed-filter-chips::-webkit-scrollbar { display: none; }
 
 .bed-filter-chip {
-  font-size: 13px;
+  font-size: var(--font-sm);
   font-weight: 600;
-  color: #555555;
+  color: var(--color-text-muted);
   background: var(--color-surface);
   border: 1px solid var(--color-border);
   border-radius: 999px;
-  padding: 5px 14px;
+  padding: 6px 16px;
+  min-height: var(--tap-min);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   white-space: nowrap;
   flex-shrink: 0;
 }
@@ -1947,11 +1972,11 @@ textarea {
 
 /* ---------- Activity tab — date group headers ---------- */
 .log-date-group {
-  font-size: 11px;
+  font-size: var(--font-xs);
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.06em;
-  color: #888;
+  color: var(--color-text-dim);
   margin: 16px 0 8px 4px;
 }
 
@@ -1971,7 +1996,7 @@ textarea {
   background: none;
   border: none;
   font-size: 16px;
-  color: #888;
+  color: var(--color-text-dim);
   min-width: 44px;
   min-height: 44px;
   display: flex;
@@ -2008,10 +2033,10 @@ textarea.invalid {
 .view-mode-toggle .mode-btn {
   background: none;
   border: none;
-  min-height: 36px;
-  min-width: 36px;
-  padding: 4px 10px;
-  font-size: 14px;
+  min-height: var(--tap-min);
+  min-width: var(--tap-min);
+  padding: 6px 12px;
+  font-size: 16px;
   color: var(--color-text-secondary);
   border-radius: 6px;
   cursor: pointer;
@@ -2093,8 +2118,8 @@ textarea.invalid {
   line-height: 1.1;
 }
 .bed-tile-crop {
-  font-size: 10px;
-  color: #555;
+  font-size: 10.5px;
+  color: var(--color-text-muted);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2105,8 +2130,8 @@ textarea.invalid {
   display: flex;
   align-items: center;
   gap: 3px;
-  font-size: 9.5px;
-  color: #666;
+  font-size: var(--font-xs);
+  color: var(--color-text-dim);
   margin-top: 3px;
 }
 .bed-tile-dot {
@@ -2765,4 +2790,48 @@ textarea.invalid {
 /* Expense Log Card */
 .log-card-expense {
   border-left: 4px solid var(--color-warning, #d97706);
+}
+
+/* ---------- Tablet & Desktop Adaptations ---------- */
+@media (min-width: 768px) {
+  .app-header {
+    max-width: 860px;
+    margin: 0 auto;
+    border-left: 1.5px solid var(--color-border);
+    border-right: 1.5px solid var(--color-border);
+    border-radius: 0 0 12px 12px;
+  }
+  main {
+    max-width: 860px;
+    padding: 24px 20px;
+  }
+  .modal-overlay {
+    align-items: center;
+    justify-content: center;
+    padding: 20px;
+  }
+  .modal-sheet {
+    max-width: 540px;
+    border-radius: 16px;
+    margin: auto;
+    transform: translateY(20px) scale(0.96);
+    opacity: 0;
+    transition: transform 0.25s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.25s ease;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.25);
+  }
+  .modal-overlay.open .modal-sheet {
+    transform: translateY(0) scale(1);
+    opacity: 1;
+  }
+  .bottom-sheet-handle {
+    display: none;
+  }
+  .bottom-nav {
+    max-width: 860px;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 1.5px solid var(--color-border);
+    border-right: 1.5px solid var(--color-border);
+    border-radius: 16px 16px 0 0;
+  }
 }

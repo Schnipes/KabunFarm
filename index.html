@@ -43,7 +43,6 @@
       </svg>
     </h1>
     <div class="header-actions">
-      <button class="formulas-btn" onclick="switchView('formulas')" aria-label="Formulas">🧪</button>
       <div class="status-badge" onclick="handleSyncBadgeClick()">
         <span class="status-dot" aria-hidden="true"></span>
         <span>Online</span>
@@ -483,8 +482,8 @@
         </div>
 
         <div class="form-field">
-          <label>Time slot</label>
-          <div class="pill-row" id="taskSlotRow">
+          <label id="taskSlotLabel">Time slot</label>
+          <div class="pill-row" id="taskSlotRow" role="group" aria-labelledby="taskSlotLabel">
             <button type="button" class="pill-choice" data-slot="Morning" onclick="selectTaskSlot(this)">Morning</button>
             <button type="button" class="pill-choice" data-slot="Afternoon" onclick="selectTaskSlot(this)">Afternoon</button>
             <button type="button" class="pill-choice" data-slot="Evening" onclick="selectTaskSlot(this)">Evening</button>
@@ -513,8 +512,8 @@
         </div>
 
         <div class="form-field">
-          <label>Link to formula <span class="hint">optional — pulls in category, color &amp; dosage</span></label>
-          <div id="taskFormulaList" class="formula-picker-list"></div>
+          <label id="taskFormulaLabel">Link to formula <span class="hint">optional — pulls in category, color &amp; dosage</span></label>
+          <div id="taskFormulaList" class="formula-picker-list" role="group" aria-labelledby="taskFormulaLabel"></div>
         </div>
 
         <div class="form-field">
