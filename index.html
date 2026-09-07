@@ -746,6 +746,14 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
-  <script type="module" src="js/app.js?v=20260828a"></script>
+  <script>
+    // Register service worker for offline-first behavior
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js')
+        .then(reg => console.log('[SW] Registered, scope:', reg.scope))
+        .catch(err => console.warn('[SW] Registration failed:', err));
+    }
+  </script>
+  <script type="module" src="js/app.js?v=20260907a"></script>
 </body>
 </html>

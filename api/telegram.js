@@ -943,7 +943,7 @@ ${locText}`;
 
     let scheduledText = '';
     if (diag.autoSchedule && cleanBed !== 'all') {
-        const taskId = 'task_' + Date.now();
+        const taskId = 'task_' + crypto.randomUUID();
         const taskDoc = {
             id: taskId,
             date: tomorrow,
@@ -985,7 +985,7 @@ async function recordAndReply(chatId, record, messageId = null) {
     const date = record.date || today;
 
     if (record.type === 'sale') {
-        const id = 'sale_' + Date.now();
+        const id = 'sale_' + crypto.randomUUID();
         const saleDoc = {
             id,
             date,
@@ -1014,7 +1014,7 @@ ${syncMsg}`;
         await editTelegramMessage(chatId, messageId, reply);
 
     } else if (record.type === 'expense') {
-        const id = 'exp_' + Date.now();
+        const id = 'exp_' + crypto.randomUUID();
         const expDoc = {
             id,
             date,
@@ -1050,7 +1050,7 @@ ${syncMsg}`;
         await editTelegramMessage(chatId, messageId, reply);
 
     } else if (record.type === 'activity') {
-        const id = 'log_' + Date.now();
+        const id = 'log_' + crypto.randomUUID();
         const cleanBed = normalizeBedScope(record.bedNumber);
 
         // Auto-compute cost if not explicitly supplied
@@ -1117,7 +1117,7 @@ ${syncMsg}`;
         await editTelegramMessage(chatId, messageId, reply);
 
     } else if (record.type === 'schedule_task') {
-        const id = 'task_' + Date.now();
+        const id = 'task_' + crypto.randomUUID();
         const cleanBed = normalizeBedScope(record.bedNumber);
         const taskDoc = {
             id,
