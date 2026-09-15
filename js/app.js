@@ -505,6 +505,7 @@ export function handleSubmit(event) {
         }
     }
 
+    const newLogEntries = [];
     selectedBedNums.forEach((targetScope, idx) => {
         const entry = {
             id:               "log_" + Date.now() + "_" + idx,
@@ -533,10 +534,7 @@ export function handleSubmit(event) {
             firestore.collection("logs").doc(entry.id).set(entry).catch(e => console.error("addLog failed:", e));
         }
 
-        // Cache update
-        const logs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
-        logs.unshift(entry);
-        localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify(logs));
+        newLogEntries.push(entry);
 
         // Update bed metadata
         if (targetScope && targetScope.startsWith("plot_")) {
@@ -561,6 +559,11 @@ export function handleSubmit(event) {
             state.bedsData.forEach(b => { b.lastWatered = date; });
         }
     });
+
+    if (newLogEntries.length) {
+        const cachedLogs = JSON.parse(localStorage.getItem(LOGS_CACHE_KEY) || "[]");
+        localStorage.setItem(LOGS_CACHE_KEY, JSON.stringify([...newLogEntries, ...cachedLogs]));
+    }
 
     if (activity === "sowing" && cropName) {
         const sowBeds = bedScope.startsWith("plot_")
@@ -1223,6 +1226,12 @@ export async function quickWaterBed(bedNumber, event) {
     renderTodayTasks();
     showToast(`💧 Bed ${bedNumber} watered`);
 
+    const activeTileEl = document.getElementById(`bedTile_${bedNumber}`);
+    if (activeTileEl) {
+        activeTileEl.classList.add("anim-water-ripple");
+        setTimeout(() => activeTileEl.classList.remove("anim-water-ripple"), 400);
+    }
+
     const firestore = getDb();
     if (firestore) {
         firestore.collection("logs").doc(logId).set(newLog).catch(e => console.error(e));
@@ -1528,9 +1537,12 @@ export function openBedFromPlot(plotId, bedNum) {
 }
 
 // --- 9. Pull to Refresh ---
+let isPtrInitialized = false;
 export function setupPullToRefresh() {
+    if (isPtrInitialized) return;
     const ptr = document.getElementById("ptrIndicator");
     if (!ptr) return;
+    isPtrInitialized = true;
     let startY = 0;
     let pulling = false;
 
@@ -1570,7 +1582,10 @@ export function setupPullToRefresh() {
 }
 
 // --- 10. Initialization Routine ---
+let isAppInitialized = false;
 export async function initApp() {
+    if (isAppInitialized) return;
+    isAppInitialized = true;
     setupPullToRefresh();
     updateSyncBadge();
 

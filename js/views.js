@@ -310,7 +310,7 @@ export function renderBedTile(bed) {
         </button>` : "";
 
     return `
-    <div class="${tileClass}" id="bedTile_${safeBedNum}" data-bed="${safeBedNum}" onclick="openBedDetail('${safeBedNum}')">
+    <div class="${tileClass}" id="bedTile_${safeBedNum}" data-bed="${safeBedNum}">
         <div class="bed-tile-header">
             <span class="bed-tile-num">${safeBedNum}</span>
             ${quickWaterBtn}
@@ -343,7 +343,7 @@ export function renderBedGrid(beds) {
 
         html += `
         <div class="bed-grid-plot-group">
-            <div class="bed-grid-plot-header" data-plot="${safePlotId}" onclick="openPlotDetail('${safePlotId}')">
+            <div class="bed-grid-plot-header" data-plot="${safePlotId}">
                 <p class="bed-grid-plot-title">🗂️ ${escapeHtml(plot ? plot.name : "Plot")} (${plotBeds.length} beds)</p>
                 <div class="bed-grid-plot-meta">${waterBadge} ›</div>
             </div>
@@ -399,7 +399,10 @@ export function renderBeds(beds) {
         return;
     }
 
-    renderBedGrid(beds);
+    if (state.bedViewMode === "grid") {
+        renderBedGrid(beds);
+        return;
+    }
 
     if (!listContainer) return;
     const growing = beds.filter(b => b.status !== "fallow" && b.crops && b.crops.length > 0);
