@@ -58,27 +58,118 @@ function getAdminFirestore() {
     }
 }
 
-const SYSTEM_PROMPT = `
+// ============================================================================
+// Inventory context — Firestore `inventory` collection is the single source of
+// truth for product names, pricing, and dosing. The prompt builders below are
+// formatted dynamically from it (with a static fallback snapshot mirroring
+// DEFAULT_INVENTORY in js/state.js, used only when Admin SDK is unavailable).
+// ============================================================================
+const FALLBACK_INVENTORY = [
+    { id: "bio_botava", name: "KMB Bio Botava", category: "foliar", packPrice: 94.00, packSize: 1000, unit: "ml", costPerUnit: 0.094, dosePerLitre: 2.5, doseUnit: "ml", dosePerApplication: 0, moaCode: "IRAC UNM", phiDays: 0 },
+    { id: "amino_18", name: "KMB Amino 18", category: "foliar", packPrice: 35.00, packSize: 1000, unit: "ml", costPerUnit: 0.035, dosePerLitre: 2.0, doseUnit: "ml", dosePerApplication: 0, moaCode: "NUT-AMINO", phiDays: 0 },
+    { id: "garlic_oil", name: "Garlic Oil Extract", category: "foliar", packPrice: 35.00, packSize: 1000, unit: "ml", costPerUnit: 0.035, dosePerLitre: 1.5, doseUnit: "ml", dosePerApplication: 0, moaCode: "IRAC UNM", phiDays: 0 },
+    { id: "neem_oil", name: "Neem Oil", category: "foliar", packPrice: 34.00, packSize: 1000, unit: "ml", costPerUnit: 0.034, dosePerLitre: 5.0, doseUnit: "ml", dosePerApplication: 0, moaCode: "IRAC UNM", phiDays: 0 },
+    { id: "wood_vinegar", name: "Wood Vinegar", category: "foliar", packPrice: 18.00, packSize: 1000, unit: "ml", costPerUnit: 0.018, dosePerLitre: 2.0, doseUnit: "ml", dosePerApplication: 0, moaCode: "FRAC M", phiDays: 0 },
+    { id: "seaweed", name: "Seaweed Extract", category: "foliar", packPrice: 60.00, packSize: 1000, unit: "ml", costPerUnit: 0.060, dosePerLitre: 1.5, doseUnit: "ml", dosePerApplication: 0, moaCode: "BIO-KELP", phiDays: 0 },
+    { id: "pest_guard_2", name: "KMB Pest Guard 2 (Powder)", category: "foliar", packPrice: 75.00, packSize: 500, unit: "g", costPerUnit: 0.150, dosePerLitre: 3.0, doseUnit: "g", dosePerApplication: 0, moaCode: "IRAC UNM", phiDays: 0 },
+    { id: "wira_calbo", name: "Wira CalBo", category: "foliar", packPrice: 45.00, packSize: 1000, unit: "ml", costPerUnit: 0.045, dosePerLitre: 2.0, doseUnit: "ml", dosePerApplication: 0, moaCode: "NUT-CA-B", phiDays: 0 },
+    { id: "antracol", name: "Antracol 70 WP", category: "foliar", packPrice: 45.00, packSize: 1000, unit: "g", costPerUnit: 0.045, dosePerLitre: 2.0, doseUnit: "g", dosePerApplication: 0, moaCode: "FRAC M02", phiDays: 7 },
+    { id: "em4", name: "EM4", category: "foliar", packPrice: 25.00, packSize: 1000, unit: "ml", costPerUnit: 0.025, dosePerLitre: 5.0, doseUnit: "ml", dosePerApplication: 0, moaCode: "BIO-01", phiDays: 0 },
+    { id: "abamectin", name: "Abamectin", category: "foliar", packPrice: 38.00, packSize: 1000, unit: "ml", costPerUnit: 0.038, dosePerLitre: 1.0, doseUnit: "ml", dosePerApplication: 0, moaCode: "IRAC 6", phiDays: 7 },
+    { id: "cypermethrin", name: "Cypermethrin", category: "foliar", packPrice: 35.00, packSize: 1000, unit: "ml", costPerUnit: 0.035, dosePerLitre: 1.5, doseUnit: "ml", dosePerApplication: 0, moaCode: "IRAC 3A", phiDays: 7 },
+    { id: "npk_11_11_11", name: "RealStrong NPK 11-11-11", category: "fertilizer", packPrice: 115.00, packSize: 25, unit: "kg", costPerUnit: 4.60, dosePerLitre: 0, doseUnit: "kg", dosePerApplication: 1, moaCode: "NUTRITION", phiDays: 0 },
+    { id: "npk_8_8_29", name: "RealStrong NPK 8-8-29", category: "fertilizer", packPrice: 140.00, packSize: 25, unit: "kg", costPerUnit: 5.60, dosePerLitre: 0, doseUnit: "kg", dosePerApplication: 1, moaCode: "NUTRITION", phiDays: 0 },
+    { id: "bluvita_16_16_16", name: "Bluvita NPK 16-16-16", category: "fertilizer", packPrice: 185.00, packSize: 50, unit: "kg", costPerUnit: 3.70, dosePerLitre: 0, doseUnit: "kg", dosePerApplication: 1, moaCode: "NUTRITION", phiDays: 0 },
+    { id: "dolomite", name: "Dolomite (Kapur Pertanian)", category: "fertilizer", packPrice: 20.00, packSize: 25, unit: "kg", costPerUnit: 0.80, dosePerLitre: 0, doseUnit: "kg", dosePerApplication: 1, moaCode: "NUTRITION", phiDays: 0 }
+];
+
+const INVENTORY_CACHE_TTL_MS = 5 * 60 * 1000;
+let inventoryCache = { items: null, fetchedAt: 0 };
+
+async function fetchInventoryContext() {
+    const now = Date.now();
+    if (inventoryCache.items && (now - inventoryCache.fetchedAt) < INVENTORY_CACHE_TTL_MS) {
+        return inventoryCache.items;
+    }
+
+    const adminFirestore = getAdminFirestore();
+    if (adminFirestore) {
+        try {
+            const snap = await adminFirestore.collection('inventory').get();
+            const items = [];
+            snap.forEach(doc => {
+                const d = doc.data();
+                if (d.status === 'deleted') return;
+                items.push({
+                    id: d.id || doc.id,
+                    name: d.name || doc.id,
+                    category: d.category || '',
+                    unit: d.unit || '',
+                    packPrice: parseFloat(d.packPrice) || 0,
+                    packSize: parseFloat(d.packSize) || 0,
+                    costPerUnit: parseFloat(d.costPerUnit) || 0,
+                    dosePerLitre: parseFloat(d.dosePerLitre) || 0,
+                    doseUnit: d.doseUnit || d.unit || '',
+                    dosePerApplication: parseFloat(d.dosePerApplication) || 0,
+                    moaCode: d.moaCode || '',
+                    phiDays: parseInt(d.phiDays, 10) || 0,
+                    standardDosage: d.standardDosage || ''
+                });
+            });
+            if (items.length) {
+                inventoryCache = { items, fetchedAt: now };
+                return items;
+            }
+            console.warn('Firestore inventory collection is empty, using fallback snapshot');
+        } catch (e) {
+            console.warn('Firestore inventory fetch failed, using fallback snapshot:', e.message || e);
+        }
+    } else {
+        console.warn('Admin SDK unavailable for inventory fetch, using fallback snapshot');
+    }
+
+    inventoryCache = { items: FALLBACK_INVENTORY, fetchedAt: now };
+    return FALLBACK_INVENTORY;
+}
+
+function formatInventoryForPrompt(items) {
+    const foliar = items
+        .filter(i => i.dosePerLitre > 0)
+        .sort((a, b) => a.name.localeCompare(b.name));
+    const granular = items
+        .filter(i => !(i.dosePerLitre > 0) && (i.costPerUnit > 0))
+        .sort((a, b) => a.name.localeCompare(b.name));
+
+    const lines = [];
+    let n = 1;
+    foliar.forEach(i => {
+        const packDesc = i.packPrice > 0 && i.packSize > 0
+            ? `RM ${i.packPrice}/${i.packSize}${i.unit} = RM ${i.costPerUnit}/${i.unit}`
+            : `RM ${i.costPerUnit}/${i.unit}`;
+        const moa = i.moaCode ? `${i.moaCode} - ` : '';
+        const phi = i.phiDays > 0 ? `, ${i.phiDays}-day PHI` : '';
+        lines.push(`${n}. ${i.name} (${i.dosePerLitre} ${i.doseUnit || i.unit}/L, ${packDesc}, ${moa}${i.category || 'foliar'}${phi})`);
+        n++;
+    });
+    granular.forEach(i => {
+        const packDesc = i.packPrice > 0 && i.packSize > 0
+            ? `RM ${i.packPrice}/${i.packSize}${i.unit} = RM ${i.costPerUnit}/${i.unit}`
+            : `RM ${i.costPerUnit}/${i.unit}`;
+        const appDesc = i.dosePerApplication > 0 ? `, standard application: ${i.dosePerApplication} ${i.unit}` : '';
+        lines.push(`${n}. ${i.name} (${packDesc}${appDesc} - ${i.category || 'fertilizer'})`);
+        n++;
+    });
+    return lines.join('\n');
+}
+
+function buildSystemPrompt(items) {
+    const inventoryBlock = formatInventoryForPrompt(items);
+    return `
 You are the AI Farm Intelligence Assistant for Kabun Farm.
 Your job is to parse voice messages or text sent by farmers and extract structured farm activity logs, sales records, overhead expenses, or planning commands.
 
-The farm stocks 16 registered inventory items (Foliar, Botanicals & Solid Fertilizers):
-1. KMB Bio Botava (2.5 ml/L, RM 94/1L = RM 0.094/ml, IRAC UNM - Botanical insect repellent)
-2. Neem Oil (5.0 ml/L + 2ml soap, RM 34/1L = RM 0.034/ml, IRAC UNM - Azadirachtin organic knockdown)
-3. KMB Pest Guard 2 (Powder, 2.0 - 3.0 g/L, RM 75/500g = RM 0.15/g, IRAC UNM - Botanical contact deterrent)
-4. Wood Vinegar / Cuka Kayu (2.0 ml/L, RM 18/1L = RM 0.018/ml, FRAC M - Multi-site fungal suppressor)
-5. Antracol 70 WP (2.0 g/L, RM 45/1kg = RM 0.045/g, FRAC M02 - Propineb protectant, 7-day PHI)
-6. Wira CalBo (2.0 ml/L, RM 45/1L = RM 0.045/ml, Nutrition - Calcium + Boron fruit set booster)
-7. KMB Amino 18 (2.0 ml/L, RM 35/1L = RM 0.035/ml, Nutrition - 18 L-Amino acids vegetative recovery)
-8. Garlic Oil Extract (1.5 - 2.0 ml/L, RM 35/1L = RM 0.035/ml, IRAC UNM - Botanical aromatic deterrent)
-9. EM4 (5.0 - 10.0 ml/L, RM 25/1L = RM 0.025/ml, Biological Inoculant - Beneficial microbes)
-10. Seaweed Extract (1.0 - 1.5 ml/L, RM 60/1L = RM 0.060/ml, Biostimulant - Kelp cytokinins)
-11. Abamectin (0.5 - 1.0 ml/L, RM 38/1L = RM 0.038/ml, IRAC Group 6 - Mites/leafminers knockdown, 7-day PHI)
-12. Cypermethrin (1.0 - 1.5 ml/L, RM 35/1L = RM 0.035/ml, IRAC Group 3A - Caterpillars knockdown, 7-day PHI)
-13. RealStrong NPK 11-11-11 (RM 115/25kg = RM 4.60/kg - Bio-chemical base & balanced growth)
-14. RealStrong NPK 8-8-29 (RM 140/25kg = RM 5.60/kg - High Potassium fruiting finisher)
-15. Bluvita NPK 16-16-16 (RM 185/50kg = RM 3.70/kg - High Nitrogen vegetative booster)
-16. Dolomite / Kapur Pertanian (RM 20/25kg = RM 0.80/kg - Soil pH buffer & Calcium/Magnesium)
+The farm stocks the following registered inventory items (live from the Firestore inventory collection):
+${inventoryBlock}
 
 Users may speak or type in:
 - Bahasa Melayu (Standard or Colloquial: "Dah kutip terung batas 2 dapat 15 kilo", "Jual terung 30kg RM5/kg", "Batas 3 dah siram air", "Tabur Bluvita 16-16-16 1kg batas 2", "Bayar bil elektrik RM145", "Beli diesel pam air RM50", "Batalkan plan racun hari ni", "Plan spray neem esok petang")
@@ -137,7 +228,7 @@ SCHEMA 5: SCHEDULE / ADD PLANNED TASK
   "category": "pest_control" | "watering" | "harvest" | "sowing",
   "bedNumber": "1", // or "all"
   "timeSlot": "Morning" | "Evening" | "Anytime",
-  "note": "Description of task or recipe using the 16 inventory products",
+  "note": "Description of task or recipe using the inventory products listed above",
   "date": "YYYY-MM-DD"
 }
 
@@ -170,24 +261,16 @@ Colloquial Price/Weight Rules:
 Today's Date: ${new Date().toISOString().slice(0, 10)}.
 Return pure JSON only, without markdown fences or extra explanations.
 `;
+}
 
-const DIAGNOSIS_PROMPT = `
+function buildDiagnosisPrompt(items) {
+    const inventoryBlock = formatInventoryForPrompt(items.filter(i => i.dosePerLitre > 0));
+    return `
 You are the Expert Agronomist and Plant Pathologist for Kabun Farm (tropical vegetable market garden in Malaysia).
 Analyze the provided crop leaf or plant photo and any optional user caption.
 
-The farm stocks ONLY these 12 registered products:
-1. KMB Bio Botava (2.5 ml/L - IRAC UNM Botanical repellent)
-2. Neem Oil (5.0 ml/L + 2ml soap - IRAC UNM Azadirachtin organic knockdown)
-3. KMB Pest Guard 2 (Powder, 2.0 - 3.0 g/L - IRAC UNM Botanical contact deterrent)
-4. Wood Vinegar / Cuka Kayu (2.0 ml/L - FRAC M Fungal suppressor/repellent)
-5. Antracol 70 WP (2.0 g/L - FRAC M02 Propineb protectant, 7-day PHI)
-6. Wira CalBo (2.0 ml/L - Nutrition: Calcium + Boron)
-7. KMB Amino 18 (2.0 ml/L - Nutrition: 18 L-Amino acids recovery)
-8. Garlic Oil Extract (1.5 - 2.0 ml/L - IRAC UNM Botanical deterrent)
-9. EM4 (5.0 - 10.0 ml/L - Beneficial microbes)
-10. Seaweed Extract (1.0 - 1.5 ml/L - Biostimulant Cytokinins)
-11. Abamectin (0.5 - 1.0 ml/L - IRAC 6 Synthetic Acaricide for severe mites/leafminers, 7-day PHI)
-12. Cypermethrin (1.0 - 1.5 ml/L - IRAC 3A Synthetic Pyrethroid for severe caterpillars, 7-day PHI)
+The farm stocks ONLY these registered spray products (live from the Firestore inventory collection):
+${inventoryBlock}
 
 Pathology Rules:
 - If Whiteflies/Aphids/Mites: Prescribe Neem Oil + Soap OR KMB Bio Botava. (If severe mites, mention Abamectin IRAC 6 as backup).
@@ -206,7 +289,7 @@ Extract the diagnosis and return ONLY a valid JSON object matching this schema:
   "confidence": "High" | "Medium" | "Low",
   "symptoms": "Detailed visual symptoms observed on leaf / fruit",
   "isIncurable": false,
-  "prescribedRemedy": "Exact recipe using the farm's 12 stocked items",
+  "prescribedRemedy": "Exact recipe using the farm's stocked items listed above",
   "moaCode": "IRAC UNM" | "FRAC M02" | "IRAC 6" | "IRAC 3A" | "Nutrition" | "Cultural",
   "phiDays": 0, // 7 for Antracol/Abamectin/Cypermethrin, 0 for organics
   "applicationTiming": "Evening (after 5:30 PM)",
@@ -214,6 +297,7 @@ Extract the diagnosis and return ONLY a valid JSON object matching this schema:
   "autoSchedule": false // true if user caption explicitly asks to schedule/plan (e.g. "jadualkan spray", "plan tolong set")
 }
 `;
+}
 
 // Helper: Send typing / action indicator
 async function sendChatAction(chatId, action = 'typing') {
@@ -617,6 +701,9 @@ async function processWithGemini(inputPart, mimeType = null) {
     const models = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
     let lastError = null;
 
+    const inventoryItems = await fetchInventoryContext();
+    const systemPrompt = buildSystemPrompt(inventoryItems);
+
     for (const m of models) {
         try {
             const model = genAI.getGenerativeModel({
@@ -626,7 +713,7 @@ async function processWithGemini(inputPart, mimeType = null) {
             let contents;
             if (mimeType) {
                 contents = [
-                    SYSTEM_PROMPT,
+                    systemPrompt,
                     {
                         inlineData: {
                             mimeType,
@@ -635,7 +722,7 @@ async function processWithGemini(inputPart, mimeType = null) {
                     }
                 ];
             } else {
-                contents = [SYSTEM_PROMPT, inputPart];
+                contents = [systemPrompt, inputPart];
             }
 
             const result = await model.generateContent(contents);
@@ -655,7 +742,9 @@ async function processPhotoDiagnosis(photoBuffer, mimeType = 'image/jpeg', userC
     const models = ['gemini-3.5-flash-lite', 'gemini-3.6-flash'];
     let lastError = null;
 
-    const promptText = userCaption ? `${DIAGNOSIS_PROMPT}\nUser Caption / Context: "${userCaption}"` : DIAGNOSIS_PROMPT;
+    const inventoryItems = await fetchInventoryContext();
+    const basePrompt = buildDiagnosisPrompt(inventoryItems);
+    const promptText = userCaption ? `${basePrompt}\nUser Caption / Context: "${userCaption}"` : basePrompt;
 
     for (const m of models) {
         try {
@@ -979,6 +1068,137 @@ _${diag.symptoms}_
     await editTelegramMessage(chatId, messageId, reply);
 }
 
+// Helper: Parse total spray volume and tank count from inputsUsed text.
+// The PWA writes patterns like "Bio-Shield — 32L mix (2x16L)" (js/views.js:686),
+// so prefer the explicit "N x size L" tuple (with or without parens), then a
+// bare "<num>L mix" total, then fall back to a single 16 L tank.
+export function parseVolumeFromInputsUsed(text) {
+    const str = String(text || '');
+    const tupleMatch = str.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*L\b/i);
+    if (tupleMatch) {
+        const tanks = parseFloat(tupleMatch[1]);
+        const size = parseFloat(tupleMatch[2]);
+        if (tanks > 0 && size > 0) return { totalLitres: tanks * size, numTanks: tanks };
+    }
+    // Bare "<num> L" total — lookbehind rejects letters AND digits so "80 ml"
+    // and "2x16L" never partial-match ("6L" out of "16L" must not match)
+    const litreMatch = str.match(/(?<![a-zA-Z\d])(\d+(?:\.\d+)?)\s*L\b(?!\w)/i);
+    if (litreMatch) {
+        const total = parseFloat(litreMatch[1]);
+        if (total > 0) return { totalLitres: total, numTanks: 1 };
+    }
+    return { totalLitres: 16, numTanks: 1 };
+}
+
+// Common colloquial aliases per inventory id (Firestore items without an entry
+// still match on their base name and any NPK formula code like "8-8-29").
+const INVENTORY_ALIASES = {
+    bio_botava: ['bio botava'],
+    amino_18: ['amino 18', 'amino'],
+    garlic_oil: ['garlic oil', 'garlic'],
+    neem_oil: ['neem'],
+    wood_vinegar: ['cuka kayu'],
+    seaweed: ['seaweed'],
+    pest_guard_2: ['pest guard'],
+    wira_calbo: ['calbo'],
+    antracol: ['antracol'],
+    abamectin: ['abamectin'],
+    cypermethrin: ['cypermethrin'],
+    em4: ['effective microorganisms'],
+    npk_11_11_11: ['11-11-11', '11 11 11'],
+    npk_8_8_29: ['8-8-29', '8 8 29'],
+    bluvita_16_16_16: ['bluvita', '16-16-16', '16 16 16'],
+    dolomite: ['kapur']
+};
+
+// Helper: All strings that can identify an inventory item in free text,
+// longest-first so the most specific variant wins.
+function inventoryMatchVariants(item) {
+    const nameLower = String(item.name || '').toLowerCase();
+    const baseName = nameLower.replace(/\s*\([^)]*\)\s*/g, ' ').replace(/\s+/g, ' ').trim();
+    const variants = new Set([nameLower, baseName]);
+    // Derive NPK formula-code variants from the name (e.g. "Bluvita NPK 16-16-16" -> "16-16-16", "16 16 16")
+    const codeMatch = baseName.match(/(\d+)\s*-\s*(\d+)\s*-\s*(\d+)/);
+    if (codeMatch) {
+        variants.add(`${codeMatch[1]}-${codeMatch[2]}-${codeMatch[3]}`);
+        variants.add(`${codeMatch[1]} ${codeMatch[2]} ${codeMatch[3]}`);
+    }
+    (INVENTORY_ALIASES[item.id] || []).forEach(a => variants.add(a));
+    return [...variants].filter(v => v && v.length >= 3).sort((a, b) => b.length - a.length);
+}
+
+// Helper: Parse an explicit granular quantity like "2kg" / "1.5 kg" stated
+// immediately next to a matched product variant. Prefers the nearest quantity
+// AFTER the name ("bluvita 16-16-16 2kg"), falling back to a tight backward
+// window ("2kg kapur"). Returns null when none stated adjacent to the name.
+function parseExplicitQuantity(text, variant) {
+    const idx = text.indexOf(variant);
+    if (idx === -1) return null;
+    const nameEnd = idx + variant.length;
+    const qtyRe = /(\d+(?:\.\d+)?)\s*(kg|g)\b/i;
+
+    // Nearest match after the product name (skip digits that are part of NPK codes)
+    const after = text.slice(nameEnd, nameEnd + 20).match(qtyRe);
+    if (after) {
+        const qty = parseFloat(after[1]);
+        if (qty > 0) return after[2].toLowerCase() === 'kg'
+            ? { amount: qty, unit: 'kg' }
+            : { amount: qty / 1000, unit: 'kg' }; // g -> kg
+    }
+
+    // Backward window for quantity-before-name phrasing ("2kg RealStrong 8-8-29").
+    // Only kg/g match, so tank volumes ("16L mix") and ml figures cannot be
+    // mistaken for a granular weight.
+    const before = text.slice(Math.max(0, idx - 24), idx).match(qtyRe);
+    if (before) {
+        const qty = parseFloat(before[1]);
+        if (qty > 0) return before[2].toLowerCase() === 'kg'
+            ? { amount: qty, unit: 'kg' }
+            : { amount: qty / 1000, unit: 'kg' }; // g -> kg
+    }
+
+    return null;
+}
+
+// Helper: Compute total application cost from inputsUsed text using the live
+// inventory (same math as calculateRecipeCost in js/calculations.js:
+//   cost = dosePerLitre × totalLitres × costPerUnit for foliar items;
+//   cost = quantity × costPerUnit for granular items).
+// Returns 0 when nothing matches (no cost line is then written to the log).
+export function computeApplicationCost(inputsUsed, inventory) {
+    const text = String(inputsUsed || '').toLowerCase();
+    if (!text || !Array.isArray(inventory) || !inventory.length) return 0;
+
+    const { totalLitres } = parseVolumeFromInputsUsed(text);
+
+    let totalCost = 0;
+    let matchedAny = false;
+
+    for (const item of inventory) {
+        if (!item || !item.name || !((parseFloat(item.costPerUnit) || 0) > 0)) continue;
+
+        const variant = inventoryMatchVariants(item).find(v => text.includes(v));
+        if (!variant) continue;
+
+        const costPerUnit = parseFloat(item.costPerUnit) || 0;
+        const dosePerLitre = parseFloat(item.dosePerLitre) || 0;
+
+        if (dosePerLitre > 0) {
+            // Foliar: dose per litre × total mixed volume × per-unit cost
+            totalCost += dosePerLitre * totalLitres * costPerUnit;
+        } else {
+            // Granular fertilizer: explicit quantity if stated, else standard application
+            const dosePerApp = parseFloat(item.dosePerApplication) || 0;
+            if (dosePerApp <= 0) continue;
+            const qty = parseExplicitQuantity(text, variant);
+            totalCost += (qty ? qty.amount : dosePerApp) * costPerUnit;
+        }
+        matchedAny = true;
+    }
+
+    return matchedAny ? Math.round(totalCost * 100) / 100 : 0;
+}
+
 // Helper: Record to Firestore and send receipt reply (updates statusMsgId in place)
 async function recordAndReply(chatId, record, messageId = null) {
     const today = new Date().toISOString().slice(0, 10);
@@ -1053,21 +1273,16 @@ ${syncMsg}`;
         const id = 'log_' + crypto.randomUUID();
         const cleanBed = normalizeBedScope(record.bedNumber);
 
-        // Auto-compute cost if not explicitly supplied
+        // Auto-compute cost if not explicitly supplied, using live inventory pricing
+        // and dosing from Firestore (volume/tanks parsed from the inputsUsed text)
         let computedCost = record.costRM ? parseFloat(record.costRM) : 0;
         if (!computedCost && record.inputsUsed) {
-            const lowerInputs = record.inputsUsed.toLowerCase();
-            if (lowerInputs.includes('bio botava')) computedCost = 3.76;
-            else if (lowerInputs.includes('neem')) computedCost = 2.72;
-            else if (lowerInputs.includes('pest guard')) computedCost = 4.80;
-            else if (lowerInputs.includes('amino')) computedCost = 1.12;
-            else if (lowerInputs.includes('calbo')) computedCost = 1.44;
-            else if (lowerInputs.includes('seaweed')) computedCost = 1.44;
-            else if (lowerInputs.includes('antracol')) computedCost = 1.44;
-            else if (lowerInputs.includes('11-11-11') || lowerInputs.includes('11 11 11')) computedCost = 4.60;
-            else if (lowerInputs.includes('8-8-29') || lowerInputs.includes('8 8 29')) computedCost = 5.60;
-            else if (lowerInputs.includes('16-16-16') || lowerInputs.includes('16 16 16') || lowerInputs.includes('bluvita')) computedCost = 3.70;
-            else if (lowerInputs.includes('dolomite') || lowerInputs.includes('kapur')) computedCost = 0.80;
+            try {
+                const inventory = await fetchInventoryContext();
+                computedCost = computeApplicationCost(record.inputsUsed, inventory);
+            } catch (ce) {
+                console.warn('Application cost computation skipped:', ce.message || ce);
+            }
         }
 
         const activityDoc = {

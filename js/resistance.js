@@ -5,11 +5,18 @@
 
 /**
  * 12-Item Farm Inventory with FRAC (Fungicide) & IRAC (Insecticide) MoA Classifications
+ *
+ * DEPRECATED as a pricing/dosing source: the Firestore `inventory` collection is the
+ * single authoritative source of truth for names, ids, prices, and dosing rates
+ * (seeded from DEFAULT_INVENTORY in js/state.js). This map remains ONLY as a static
+ * MoA/rotation lookup overlay (committee, moaGroup, targetPests, resistanceRisk,
+ * maxConsecutive) which Firestore does not store. Dosages and ids below are aligned
+ * with the inventory schema; `id` matches the Firestore document id.
  */
 export const FARM_INVENTORY = {
     // --- Biological / Botanical Repellents & Multi-Site ---
     "kmb bio botava": {
-        id: "kmb_bio_botava",
+        id: "bio_botava",
         name: "KMB Bio Botava",
         category: "Biological",
         committee: "IRAC",
@@ -23,7 +30,7 @@ export const FARM_INVENTORY = {
     },
     "neem oil": {
         id: "neem_oil",
-        name: "Neem Oil (Cold-Pressed)",
+        name: "Neem Oil",
         category: "Botanical",
         committee: "IRAC",
         moaCode: "UNM",
@@ -35,20 +42,20 @@ export const FARM_INVENTORY = {
         maxConsecutive: 99
     },
     "kmb pest guard 2": {
-        id: "kmb_pest_guard_2",
-        name: "KMB Pest Guard 2",
+        id: "pest_guard_2",
+        name: "KMB Pest Guard 2 (Powder)",
         category: "Botanical",
         committee: "IRAC",
         moaCode: "UNM",
         moaGroup: "Botanical Contact Deterrent",
         targetPests: ["Caterpillars", "Flea Beetles", "Leaf Miners", "Thrips"],
-        standardDosage: "3.0 ml / L",
+        standardDosage: "3.0 g / L", // Powder — dosed in grams, NOT ml (fixed unit drift)
         phiDays: 0,
         resistanceRisk: "Low",
         maxConsecutive: 99
     },
     "garlic oil extract": {
-        id: "garlic_oil_extract",
+        id: "garlic_oil",
         name: "Garlic Oil Extract",
         category: "Botanical",
         committee: "IRAC",
@@ -62,7 +69,7 @@ export const FARM_INVENTORY = {
     },
     "wood vinegar": {
         id: "wood_vinegar",
-        name: "Wood Vinegar (Cuka Kayu)",
+        name: "Wood Vinegar",
         category: "Botanical / Fungicide",
         committee: "FRAC",
         moaCode: "M",
@@ -75,7 +82,7 @@ export const FARM_INVENTORY = {
     },
     "em4": {
         id: "em4",
-        name: "EM4 (Effective Microorganisms)",
+        name: "EM4",
         category: "Biological Inoculant",
         committee: "BIO",
         moaCode: "BIO-01",
@@ -102,7 +109,7 @@ export const FARM_INVENTORY = {
         maxConsecutive: 99
     },
     "kmb amino 18": {
-        id: "kmb_amino_18",
+        id: "amino_18",
         name: "KMB Amino 18",
         category: "Nutrition",
         committee: "NUTRITION",
@@ -115,8 +122,8 @@ export const FARM_INVENTORY = {
         maxConsecutive: 99
     },
     "seaweed extract": {
-        id: "seaweed_extract",
-        name: "Seaweed Extract (Kelp)",
+        id: "seaweed",
+        name: "Seaweed Extract",
         category: "Biostimulant",
         committee: "BIOSTIMULANT",
         moaCode: "BIO-KELP",
